@@ -30,11 +30,14 @@ HB_PORT=${HB_PORT:-3002}
 
 # Set cluster-name if not set
 # --**-- Used By Aerospike Helm Chart, DO NOT CHANGE --**--
-if ! grep -q "cluster-name" ${CFG}
+if [ ! -z $CLUSTER_NAME ] && [ "$CLUSTER_NAME" != "" ]
 then
-	sed -i "/service[[:blank:]]*{/{p;s/.*/1/;H;g;/^\(\n1\)\{1\}$/s//\tcluster-name $CLUSTER_NAME/p;d}" ${CFG}
-else
-	printf "cluster-name is already set! \n"
+	if ! grep -q "cluster-name" ${CFG}
+	then
+		sed -i "/service[[:blank:]]*{/{p;s/.*/1/;H;g;/^\(\n1\)\{1\}$/s//\tcluster-name $CLUSTER_NAME/p;d}" ${CFG}
+	else
+		printf "cluster-name is already set! \n"
+	fi
 fi
 
 # Auto generate Node IDs and add to config
