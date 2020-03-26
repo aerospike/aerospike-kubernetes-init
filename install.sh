@@ -22,6 +22,8 @@ CONFIG_VOLUME="/etc/aerospike"
 APE_CONFIG_VOLUME="/etc/aerospike-prometheus-exporter"
 NAMESPACE=${POD_NAMESPACE:-default}
 K8_SERVICE=${SERVICE:-aerospike}
+SERVICE_DNS_DOMAIN=${SERVICE_DNS_DOMAIN:-cluster.local}
+
 for i in "$@"
 do
 case $i in
@@ -77,4 +79,4 @@ if [ -f /configs/ape.toml.template ]; then
     cp /configs/ape.toml.template "${APE_CONFIG_VOLUME}"/
 fi
 
-/peer-finder -on-start=/on-start.sh -service=$K8_SERVICE -ns=${NAMESPACE} -domain=cluster.local
+/peer-finder -on-start=/on-start.sh -service=${K8_SERVICE} -ns=${NAMESPACE} -domain=${SERVICE_DNS_DOMAIN}
