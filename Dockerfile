@@ -21,25 +21,16 @@
 
 FROM golang:buster AS builder
 
-COPY ./peers.go /builder/peers.go
-COPY ./main.go /builder/main.go
-COPY ./utils.go /builder/utils.go
-COPY ./init.go /builder/init.go
-COPY ./config.go /builder/config.go
+ADD . $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/
 
-WORKDIR /builder
+WORKDIR $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/
 
-RUN go get -d ./... \
-	&& go build -o init . \
+RUN go build -o init . \
 	&& cp init /init
 
-COPY ./aerospike-utility/aku-adm.go /utility/aku-adm.go
-COPY ./aerospike-utility/aku-utils.go /utility/aku-utils.go
+WORKDIR $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/aerospike-utility/
 
-WORKDIR /utility
-
-RUN go get -d ./... \
-	&& go build -o aku-adm aku-adm.go aku-utils.go \
+RUN go build -o aku-adm . \
 	&& cp aku-adm /aku-adm
 
 FROM debian:buster-slim
