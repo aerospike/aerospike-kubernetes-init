@@ -19,24 +19,35 @@
 # Aerospike Kubernetes' Init Container Image
 #
 
-FROM golang:buster AS peer_finder_builder
+FROM golang:buster AS builder
 
-COPY ./peer-finder/peer-finder.go /builder/peer-finder.go
+COPY ./peers.go /builder/peers.go
+COPY ./main.go /builder/main.go
+COPY ./utils.go /builder/utils.go
+COPY ./init.go /builder/init.go
+COPY ./config.go /builder/config.go
+
 WORKDIR /builder
-RUN go get -d ./... \
-	&& go build -o peer-finder . \
-	&& cp peer-finder /peer-finder
 
+RUN go get -d ./... \
+	&& go build -o init . \
+	&& cp init /init
+
+COPY ./aerospike-utility/aku-adm.go /utility/aku-adm.go
+COPY ./aerospike-utility/aku-utils.go /utility/aku-utils.go
+
+WORKDIR /utility
+
+RUN go get -d ./... \
+	&& go build -o aku-adm aku-adm.go aku-utils.go \
+	&& cp aku-adm /aku-adm
 
 FROM debian:buster-slim
 
-COPY install.sh /install.sh
-COPY on-start.sh /on-start.sh
-COPY --from=peer_finder_builder /peer-finder /peer-finder
-COPY aerospike.sh /aerospike.sh
+COPY --from=builder /init /init
+COPY --from=builder /aku-adm /aku-adm
 
-RUN chmod +x /install.sh /on-start.sh /peer-finder /aerospike.sh \
-	&& apt update -y \
-	&& apt install curl jq -y
+RUN chmod +x /init /aku-adm
 
-ENTRYPOINT [ "/install.sh" ]
+ENTRYPOINT [ "/init" ]
+CMD ["--log-level", "debug"]
