@@ -1,4 +1,0 @@
-[submodule "peer-finder"]
-	path = peer-finder
-	url = https://github.com/aerospike/peer-finder.git
-	branch = master
