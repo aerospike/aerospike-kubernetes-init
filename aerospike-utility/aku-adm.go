@@ -90,9 +90,7 @@ func performOperation(op string, host string) {
 		client.Close()
 		break
 	case "liveness":
-		client := createAerospikeClient(host, adminUsername, adminPassword)
-		performLivenessProbeOp(client)
-		client.Close()
+		performLivenessProbeOp(host, adminUsername, adminPassword)
 		break
 	case "pre-stop-community":
 		client := createAerospikeClient(host, "", "")
@@ -155,41 +153,34 @@ func performPreStopOpCommunity(client *aerospike.Client) {
 
 // Liveness probe check
 // Performs an info call "build" on localhost
-func performLivenessProbeOp(client *aerospike.Client) {
+func performLivenessProbeOp(host, adminUsername, adminPassword string) {
 	zap.S().Info("Starting Liveness check.")
-	var activeNodes []*aerospike.Node
-
-	infoPolicy := aerospike.NewInfoPolicy()
-	infoPolicy.Timeout = 5 * time.Second
 
 	command := "build"
 	success := false
 
+	var connection *aerospike.Connection
+	var err error
+
 	for i := 0; i < 3; i++ {
-		retry := false
-		activeNodes = client.GetNodes()
-
-		for _, node := range activeNodes {
-			hostName := node.GetHost().Name
-			if hostName == "localhost" || hostName == "127.0.0.1" || hostName == myPodIP {
-				out, err := node.RequestInfo(infoPolicy, command)
-				if err != nil {
-					zap.S().Errorf("Error while fetching build version on node %s: %v. Retrying.", node.GetName(), err)
-					retry = true
-					break
-				}
-
-				zap.S().Debugf("Result: %s.", out[command])
-				success = true
-				break
+		if connection == nil {
+			connection, err = initAerospikeConnection(host, adminUsername, adminPassword)
+			if err != nil {
+				zap.S().Errorf("Error while creating connection to %s: %v. Retrying.", host, err)
+				time.Sleep(1 * time.Second)
+				continue
 			}
 		}
 
-		if retry || !success {
+		out, err := aerospike.RequestInfo(connection, command)
+		if err != nil {
+			zap.S().Errorf("Error while fetching build version: %v. Retrying.", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
 
+		zap.S().Debugf("Response: %s.", out[command])
+		success = true
 		break
 	}
 
@@ -198,6 +189,7 @@ func performLivenessProbeOp(client *aerospike.Client) {
 	}
 
 	zap.S().Info("Liveness check success.")
+	return
 }
 
 // Pre stop logic
