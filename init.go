@@ -130,9 +130,9 @@ func initializeVars() {
 	}
 
 	// enable external ip services flag
-	loadbalancerserviceextip, ok := os.LookupEnv("ENABLE_EXTERNAL_IP_SERVICES")
+	extipservices, ok := os.LookupEnv("ENABLE_EXTERNAL_IP_SERVICES")
 	if ok {
-		externalIPServicesEnabled = loadbalancerserviceextip
+		externalIPServicesEnabled = extipservices
 	}
 
 	// hearbeat port
@@ -296,6 +296,26 @@ func initializeVars() {
 	expenabled, ok := os.LookupEnv("AEROSPIKE_PROMETHEUS_EXPORTER_ENABLED")
 	if ok {
 		apeEnabled = expenabled
+	}
+
+	// Validate configs
+
+	// No other method can be enabled with node port services because nodePort is selected dynamically
+	// and we can not add multiple different alternate-access-port.
+	// In case of loadbalancer and hostNetwork, port number is selected as same for the two addresses.
+	// In case of externalIPServices and hostNetwork, we have an option to configure same port numbers, hence it is allowed.
+	// In case of loadbalancer and externalIPServices too, we have an option to configure same port numbers.
+	// We can even enable loadbalancer, hostNetworking and externalIPServices all three at once, given that we select same alternate access port.
+	if loadBalancerServicesEnabled == "true" && nodePortServicesEnabled == "true" {
+		zap.S().Fatal("Both loadBalancerServices.enabled and nodePortServices.enabled is true. Use only one configuration.")
+	}
+
+	if hostNetworking == "true" && nodePortServicesEnabled == "true" {
+		zap.S().Fatal("Both hostNetwork.enabled and nodePortServices.enabled is true. Use only one configuration.")
+	}
+
+	if externalIPServicesEnabled == "true" && nodePortServicesEnabled == "true" {
+		zap.S().Fatal("Both externalIPServices.enabled and nodePortServices.enabled is true. Use only one configuration.")
 	}
 }
 
