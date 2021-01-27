@@ -100,7 +100,7 @@ func prepareAerospikeConfig(peersList []string) (err error) {
 			// Set node-id
 			if autoGenerateNodeIds == "true" {
 				if podName != "" {
-					r, _ := regexp.Compile("([^-]+$)")
+					r := regexp.MustCompile("([^-]+$)")
 					fileContent += "\tnode-id " + nodeIDPrefix + r.FindString(podName) + "\n"
 				}
 			}
