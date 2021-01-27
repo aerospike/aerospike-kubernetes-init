@@ -3,7 +3,7 @@ module aerospike/aerospike-kubernetes-init/aerospike-utility
 go 1.14
 
 require (
-	github.com/aerospike/aerospike-client-go v4.0.0+incompatible
+	github.com/aerospike/aerospike-client-go v4.1.0+incompatible
 	github.com/hashicorp/go-version v1.2.1
 	github.com/onsi/ginkgo v1.14.2 // indirect
 	github.com/onsi/gomega v1.10.4 // indirect
