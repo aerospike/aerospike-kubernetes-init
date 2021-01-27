@@ -152,8 +152,8 @@ func initTLSConfig() *tls.Config {
 			keyFileBytes := readCertFile(keyPath)
 
 			// Decode PEM data
-			keyBlock, _ := pem.Decode([]byte(keyFileBytes))
-			certBlock, _ := pem.Decode([]byte(certFileBytes))
+			keyBlock, _ := pem.Decode(keyFileBytes)
+			certBlock, _ := pem.Decode(certFileBytes)
 
 			if keyBlock == nil || certBlock == nil {
 				zap.S().Fatalf("Unable to decode PEM data for `%s` or `%s`.", keyPath, certPath)
