@@ -31,6 +31,88 @@ func readCertFile(filename string) []byte {
 
 // Initialize Aerospike client
 func initAerospikeClient(host string, username string, password string) (*aerospike.Client, error) {
+	clientPolicy := aerospike.NewClientPolicy()
+	tlsConfig := initTLSConfig()
+
+	if securityEnabled == "true" {
+		clientPolicy.User = username
+		clientPolicy.Password = password
+
+		if authMode == "external" {
+			clientPolicy.AuthMode = aerospike.AuthModeExternal
+		}
+	}
+
+	clientPolicy.Timeout = 5 * time.Second
+	clientPolicy.TlsConfig = tlsConfig
+
+	port := servicePlainPort
+	tlsName := ""
+	if clientPolicy.TlsConfig != nil {
+		port = serviceTLSPort
+		tlsName = serviceTLSName
+	}
+	portInt, _ := strconv.Atoi(port)
+
+	server := aerospike.NewHost(host, portInt)
+	server.TLSName = tlsName
+	zap.S().Debugf("Connecting to aerospike node %s:%d.", host, portInt)
+
+	client, err := aerospike.NewClientWithPolicyAndHost(clientPolicy, server)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+// Create a connection to Aerospike node
+func initAerospikeConnection(host string, username string, password string) (*aerospike.Connection, error) {
+	clientPolicy := aerospike.NewClientPolicy()
+	tlsConfig := initTLSConfig()
+
+	if securityEnabled == "true" {
+		clientPolicy.User = username
+		clientPolicy.Password = password
+
+		if authMode == "external" {
+			clientPolicy.AuthMode = aerospike.AuthModeExternal
+		}
+	}
+
+	// only one connection
+	clientPolicy.ConnectionQueueSize = 1
+	clientPolicy.Timeout = 5 * time.Second
+	clientPolicy.TlsConfig = tlsConfig
+
+	port := servicePlainPort
+	tlsName := ""
+	if clientPolicy.TlsConfig != nil {
+		port = serviceTLSPort
+		tlsName = serviceTLSName
+	}
+	portInt, _ := strconv.Atoi(port)
+
+	server := aerospike.NewHost(host, portInt)
+	server.TLSName = tlsName
+	zap.S().Debugf("Connecting to aerospike node %s:%d.", host, portInt)
+
+	connection, err := aerospike.NewConnection(clientPolicy, server)
+	if err != nil {
+		return nil, err
+	}
+
+	if clientPolicy.RequiresAuthentication() {
+		if err := connection.Login(clientPolicy); err != nil {
+			return nil, err
+		}
+	}
+
+	return connection, nil
+}
+
+// Initialize TLS config
+func initTLSConfig() *tls.Config {
 	var tlsConfig *tls.Config
 
 	if serviceTLSEnabled == "true" {
@@ -70,8 +152,8 @@ func initAerospikeClient(host string, username string, password string) (*aerosp
 			keyFileBytes := readCertFile(keyPath)
 
 			// Decode PEM data
-			keyBlock, _ := pem.Decode([]byte(keyFileBytes))
-			certBlock, _ := pem.Decode([]byte(certFileBytes))
+			keyBlock, _ := pem.Decode(keyFileBytes)
+			certBlock, _ := pem.Decode(certFileBytes)
 
 			if keyBlock == nil || certBlock == nil {
 				zap.S().Fatalf("Unable to decode PEM data for `%s` or `%s`.", keyPath, certPath)
@@ -104,39 +186,7 @@ func initAerospikeClient(host string, username string, password string) (*aerosp
 		tlsConfig.BuildNameToCertificate()
 	}
 
-	clientPolicy := aerospike.NewClientPolicy()
-
-	if securityEnabled == "true" {
-		clientPolicy.User = username
-		clientPolicy.Password = password
-
-		if authMode == "external" {
-			clientPolicy.AuthMode = aerospike.AuthModeExternal
-		}
-	}
-
-	clientPolicy.Timeout = 5 * time.Second
-
-	clientPolicy.TlsConfig = tlsConfig
-
-	port := servicePlainPort
-	tlsName := ""
-	if clientPolicy.TlsConfig != nil {
-		port = serviceTLSPort
-		tlsName = serviceTLSName
-	}
-
-	portInt, _ := strconv.Atoi(port)
-	server := aerospike.NewHost(host, portInt)
-	server.TLSName = tlsName
-	zap.S().Debugf("Connecting to aerospike node %s:%d.", host, portInt)
-
-	client, err := aerospike.NewClientWithPolicyAndHost(clientPolicy, server)
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
+	return tlsConfig
 }
 
 // Get certificate file path

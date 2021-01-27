@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -301,7 +302,7 @@ func prepareAerospikeConfig(peersList []string) (err error) {
 							continue
 						}
 
-						loadbalancerIP, loadbalancerPort, err = getLoadBalancerIPPortAndNodePort(serviceResp, "aerospike-plain")
+						loadbalancerIP, loadbalancerPort, err = getLoadBalancerIPAndPort(serviceResp, "aerospike-plain")
 						if err != nil {
 							zap.S().Warnf("Error getting loadbalancer IP, port and node port: %v. Retrying.", err)
 							time.Sleep(lbServicePollPeriod)
@@ -329,7 +330,7 @@ func prepareAerospikeConfig(peersList []string) (err error) {
 							continue
 						}
 
-						loadbalancerTLSIP, loadbalancerTLSPort, err = getLoadBalancerIPPortAndNodePort(serviceResp, "aerospike-tls")
+						loadbalancerTLSIP, loadbalancerTLSPort, err = getLoadBalancerIPAndPort(serviceResp, "aerospike-tls")
 						if err != nil {
 							zap.S().Warnf("Error getting loadbalancer IP, port and node port: %v. Retrying.", err)
 							time.Sleep(lbServicePollPeriod)
@@ -511,28 +512,46 @@ func sendHTTPRequest(client *http.Client, url string, method string, bearerToken
 	return client.Do(req)
 }
 
-type ServiceRequest struct {
+// ServiceResponse represents the response message when querying kubernetes service
+// Contains "spec" and "status" fields
+type ServiceResponse struct {
 	Specifications Spec `json:"spec,omitempty"`
 	Status         Stat `json:"status,omitempty"`
 }
 
+// Stat represents "status" field in service response
+// Contains "loadBalancer" field
 type Stat struct {
 	LoadBalancer Ingresses `json:"loadBalancer,omitempty"`
 }
 
+// Ingresses represents the each loadBalancer
+// Contains "ingress" field
 type Ingresses struct {
 	Ingress []Address `json:"ingress,omitempty"`
 }
 
+// Address represents the endpoints of the loadbalancer
+// Contains "ip" and "hostname" fields
+//
+// IP is set for load-balancer ingress points that are IP based
+// (typically GCE or OpenStack load-balancers)
+//
+// Hostname is set for load-balancer ingress points that are DNS based
+// (typically AWS load-balancers)
 type Address struct {
-	IP string `json:"ip,omitempty"`
+	IP       string `json:"ip"`
+	Hostname string `json:"hostname"`
 }
 
+// Spec represents "spec" field in service response
+// Contains "ports" and "externalIPs" fields
 type Spec struct {
 	Ports       []Port   `json:"ports,omitempty"`
 	ExternalIPs []string `json:"externalIPs,omitempty"`
 }
 
+// Port represents the "port" field in service spec
 type Port struct {
 	Name       string `json:"name,omitempty"`
 	Protocol   string `json:"protocol,omitempty"`
@@ -543,7 +562,7 @@ type Port struct {
 
 func getNodePort(resp *http.Response, name string) (int, error) {
 	decoder := json.NewDecoder(resp.Body)
-	sr := &ServiceRequest{}
+	sr := &ServiceResponse{}
 
 	err := decoder.Decode(sr)
 	if err != nil {
@@ -562,7 +581,7 @@ func getNodePort(resp *http.Response, name string) (int, error) {
 
 func getExtIPPort(resp *http.Response, name string) (string, int, error) {
 	decoder := json.NewDecoder(resp.Body)
-	sr := &ServiceRequest{}
+	sr := &ServiceResponse{}
 
 	err := decoder.Decode(sr)
 	if err != nil {
@@ -578,9 +597,9 @@ func getExtIPPort(resp *http.Response, name string) (string, int, error) {
 	return "", 0, fmt.Errorf("unable to locate port: %s", name)
 }
 
-func getLoadBalancerIPPortAndNodePort(resp *http.Response, name string) (string, int, error) {
+func getLoadBalancerIPAndPort(resp *http.Response, name string) (string, int, error) {
 	decoder := json.NewDecoder(resp.Body)
-	sr := &ServiceRequest{}
+	sr := &ServiceResponse{}
 
 	err := decoder.Decode(sr)
 	if err != nil {
@@ -593,33 +612,69 @@ func getLoadBalancerIPPortAndNodePort(resp *http.Response, name string) (string,
 
 	for _, v := range sr.Specifications.Ports {
 		if v.Name == name {
-			return sr.Status.LoadBalancer.Ingress[0].IP, v.AppPort, nil
+			// IP is set for load-balancer ingress points that are IP based
+			// (typically GCE or OpenStack load-balancers)
+			//
+			// Hostname is set for load-balancer ingress points that are DNS based
+			// (typically AWS load-balancers)
+			//
+			// Assume preference for IP over hostname
+			if sr.Status.LoadBalancer.Ingress[0].IP != "" {
+				return sr.Status.LoadBalancer.Ingress[0].IP, v.AppPort, nil
+			}
+
+			if sr.Status.LoadBalancer.Ingress[0].Hostname != "" {
+				hostName := sr.Status.LoadBalancer.Ingress[0].Hostname
+				// Try to resolve the loadbalancer dns name here
+				// Aerospike might throw error if the dns name is not resolvable
+				for attempt := 0; attempt < lbServicePollRetryLimit; attempt++ {
+					_, err := net.LookupIP(hostName)
+					if err != nil {
+						zap.S().Warnf("unable to resolve loadbalancer hostname %s. Retrying.", hostName)
+						time.Sleep(lbServicePollPeriod)
+						continue
+					}
+
+					return hostName, v.AppPort, nil
+				}
+
+				return "", 0, fmt.Errorf("invalid hostname for the loadbalancer")
+			}
+
+			zap.S().Error("Port matched, but no IP or hostname found for the loadbalancer.")
 		}
 	}
 
 	return "", 0, fmt.Errorf("unable to locate port: %s", name)
 }
 
-type NodeRequest struct {
+// NodeResponse represents the response when querying kubernetes nodes
+// Contains "items" field which in-turn contains each node object
+type NodeResponse struct {
 	Nodes []Node `json:"items,omitempty"`
 }
 
+// Node represents the kubernetes node
+// Contains "status" field
 type Node struct {
 	Status Addresses `json:"status,omitempty"`
 }
 
+// Addresses represents the list of addresses for a kubernetes nodes
 type Addresses struct {
-	IPAddresses []IPAddress `json:"addresses",omitempty`
+	IPAddresses []IPAddress `json:"addresses,omitempty"`
 }
 
+// IPAddress field represents individual address for a kubernetes node
+// Contains type and ip address
 type IPAddress struct {
 	Type    string `json:"type,omitempty"`
-	Address string `json:"address",omitempty"`
+	Address string `json:"address,omitempty"`
 }
 
 func getNodeIP(resp *http.Response, hostIP string) string {
 	decoder := json.NewDecoder(resp.Body)
-	nr := &NodeRequest{}
+	nr := &NodeResponse{}
 
 	err := decoder.Decode(nr)
 	if err != nil {
