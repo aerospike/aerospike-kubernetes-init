@@ -304,7 +304,7 @@ func prepareAerospikeConfig(peersList []string) (err error) {
 
 						loadbalancerIP, loadbalancerPort, err = getLoadBalancerIPAndPort(serviceResp, "aerospike-plain")
 						if err != nil {
-							zap.S().Warnf("Error getting loadbalancer IP, port and node port: %v. Retrying.", err)
+							zap.S().Warnf("Error getting loadbalancer IP and port: %v. Retrying.", err)
 							time.Sleep(lbServicePollPeriod)
 							continue
 						}
@@ -332,7 +332,7 @@ func prepareAerospikeConfig(peersList []string) (err error) {
 
 						loadbalancerTLSIP, loadbalancerTLSPort, err = getLoadBalancerIPAndPort(serviceResp, "aerospike-tls")
 						if err != nil {
-							zap.S().Warnf("Error getting loadbalancer IP, port and node port: %v. Retrying.", err)
+							zap.S().Warnf("Error getting loadbalancer IP and port: %v. Retrying.", err)
 							time.Sleep(lbServicePollPeriod)
 							continue
 						}

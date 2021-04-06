@@ -321,15 +321,23 @@ func initializeVars() {
 
 // initializeConfigVolume prepares the config volume with necessary files and scripts.
 // copies necessary configuration and license files from k8s configmap
-func initializeConfigVolume(configMapMountPath, aerospikeConfigVolumePath, apeConfigVolumePath string) {
+func initializeConfigVolume(configMapMountPath, secretsMountPath, aerospikeConfigVolumePath, apeConfigVolumePath string) {
 	// aerospike.template.conf
 	err := copyFile(configMapMountPath+"/aerospike.template.conf", aerospikeConfigVolumePath+"/aerospike.template.conf")
 	if err != nil {
 		zap.S().Errorf("%v.", err)
 	}
 
-	// features.conf
+	// features.conf (from configmap)
+	// for older helm chart releases, features.conf is part of the configmap
+	// keep this code for backward compatibility
 	err = copyFile(configMapMountPath+"/features.conf", aerospikeConfigVolumePath+"/features.conf")
+	if err != nil {
+		zap.S().Errorf("%v.", err)
+	}
+
+	// features.conf (from secrets)
+	err = copyFile(secretsMountPath+"/features.conf", aerospikeConfigVolumePath+"/features.conf")
 	if err != nil {
 		zap.S().Errorf("%v.", err)
 	}

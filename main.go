@@ -1,14 +1,16 @@
 package main
 
 import (
-	flag "github.com/spf13/pflag"
 	"time"
+
+	flag "github.com/spf13/pflag"
 )
 
 // Defaults
 var (
 	// Don't change unless necessary
 	configMapMountPath        string = "/configs"
+	secretsMountPath          string = "/secrets"
 	aerospikeConfigVolumePath string = "/etc/aerospike"
 	apeConfigVolumePath       string = "/etc/aerospike-prometheus-exporter"
 
@@ -89,7 +91,7 @@ func main() {
 
 	// Intialize config volume
 	sugarLogger.Info("Initializing config volume.")
-	initializeConfigVolume(configMapMountPath, aerospikeConfigVolumePath, apeConfigVolumePath)
+	initializeConfigVolume(configMapMountPath, secretsMountPath, aerospikeConfigVolumePath, apeConfigVolumePath)
 
 	// Find peers and prepare aerospike config file
 	sugarLogger.Info("Finding peers.")
