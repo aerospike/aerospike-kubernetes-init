@@ -1,44 +1,75 @@
-# ------------------------------------------------------------------------------
-# Copyright 2012-2021 Aerospike, Inc.
 #
-# Portions may be licensed to Aerospike, Inc. under one or more contributor
-# license agreements.
+# Aerospike Kubernetes Operator Init Container.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
-# ------------------------------------------------------------------------------
+# Build the akoinit binary
+FROM --platform=$BUILDPLATFORM golang:1.19 as builder
 
-#
-# Aerospike Kubernetes' Init Container Image
-#
+# OS and Arch args
+ARG TARGETOS
+ARG TARGETARCH
 
-FROM golang:buster AS builder
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# cache deps before building and copying source so that we don't need to re-download as much
+# and so that source changes don't invalidate our downloaded layer
+RUN go mod download
 
-ADD . $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/
+# Copy the go source
+COPY main.go main.go
+COPY cmd cmd/
+COPY pkg pkg/
 
-WORKDIR $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/
+# Build
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go build -a -o akoinit main.go
+# Note: Don't change /workdir/bin path. This path is being referenced in operator codebase.
 
-RUN go build -o init . \
-	&& cp init /init
+# Base image
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
-WORKDIR $GOPATH/src/github.com/aerospike/aerospike-kubernetes-init/aerospike-utility/
+# Maintainer
+LABEL maintainer="Aerospike, Inc. <developers@aerospike.com>"
 
-RUN go build -o aku-adm . \
-	&& cp aku-adm /aku-adm
+ARG VERSION=0.0.20
+ARG USER=root
+ARG DESCRIPTION="Initializes Aerospike pods created by the Aerospike Kubernetes Operator. Initialization includes setting up devices."
 
-FROM debian:buster-slim
+# Labels
+LABEL name="aerospike-kubernetes-init" \
+  vendor="Aerospike" \
+  version=$VERSION \
+  release="1" \
+  summary="Aerospike Kubernetes Operator Init" \
+  description=$DESCRIPTION \
+  io.k8s.display-name="Aerospike Kubernetes Operator Init $VERSION" \
+  io.openshift.tags="database,nosql,aerospike" \
+  io.k8s.description=$DESCRIPTION \
+  io.openshift.non-scalable="false"
 
-COPY --from=builder /init /init
-COPY --from=builder /aku-adm /aku-adm
+# Add entrypoint script
+ADD entrypoint.sh /workdir/bin/entrypoint.sh
+COPY --from=builder /workspace/akoinit /workdir/bin/
 
-RUN chmod +x /init /aku-adm
+# License file
+COPY LICENSE /licenses/
 
-ENTRYPOINT [ "/init" ]
-CMD ["--log-level", "debug"]
+# Install dependencies and configmap exporter
+RUN microdnf update -y \
+    && microdnf install findutils util-linux -y \
+    && mkdir -p /workdir/bin \
+    # Update permissions
+    && chgrp -R 0 /workdir \
+    && chmod -R g=u+x,o=o+x /workdir \
+    # Cleanup
+    && microdnf clean all
+
+# Add /workdir/bin to PATH
+ENV PATH "/workdir/bin:$PATH"
+
+# For RedHat Openshift, set this to non-root user ID 1001 using
+# --build-arg USER=1001 as docker build argument.
+USER $USER
+
+# Entrypoint
+ENTRYPOINT ["/workdir/bin/entrypoint.sh"]
