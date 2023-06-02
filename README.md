@@ -1,15 +1,19 @@
-# Aerospike Kubernetes InitContainer Image
+# Aerospike Kubernetes Init
 
+## Overview
 
-### Steps to build
+Aerospike Kubernetes Init is a CLI utility which is used to help operator in deploying an Aerospike cluster. It provides
+various functionalities such as server cold-restart, warm-restart, disk cleanup and Aerospike cluster status update. It 
+runs in an init-container at the time of Aerospike cluster deployment to perform all pre-requisite steps.
 
-1. Clone this repository,
-```
-git clone https://github.com/aerospike/aerospike-kubernetes-init.git
-cd aerospike-kubernetes-init
+## Building and quick start
+### Build and push image
+
+Run the following command with the appropriate name and version for the init image.
+
+```shell
+make docker-init-buildx IMG=aerospike/aerospike-kubernetes-init:0.0.20 VERSION=0.0.20
 ```
 
-2. Build docker image,
-```
-docker build . -t aerospike/aerospike-kubernetes-init
-```
+For using this new init image with Aerospike Kubernetes Operator, update the init image name and tag in AKO code base 
+and build a new operator image.
