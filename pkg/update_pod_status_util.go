@@ -81,15 +81,27 @@ func execute(cmd []string, stderr *os.File) error {
 	return command.Run()
 }
 
-func (initp *InitParams) getPodImage(ctx context.Context, podNamespacedName types.NamespacedName) (string, error) {
-	initp.logger.Info("Get pod image", "podname", podNamespacedName)
+func (initp *InitParams) getPodImage(pod *corev1.Pod) string {
+	initp.logger.Info("Get pod image", "podname", pod.Name)
 
-	pod := &corev1.Pod{}
-	if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
-		return "", err
+	return pod.Spec.Containers[0].Image
+}
+
+func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName string) (string, error) {
+	for idx := range pod.Spec.Volumes {
+		if pod.Spec.Volumes[idx].Name == volName {
+			pvc := &corev1.PersistentVolumeClaim{}
+			pvcNamespacedName := getNamespacedName(pod.Spec.Volumes[idx].PersistentVolumeClaim.ClaimName, pod.Namespace)
+
+			if err := initp.k8sClient.Get(ctx, pvcNamespacedName, pvc); err != nil {
+				return "", err
+			}
+
+			return string(pvc.UID), nil
+		}
 	}
 
-	return pod.Spec.Containers[0].Image, nil
+	return "", nil
 }
 
 func (initp *InitParams) getNodeMetadata() *asdbv1beta1.AerospikePodStatus {
@@ -120,17 +132,7 @@ func (initp *InitParams) getNodeMetadata() *asdbv1beta1.AerospikePodStatus {
 func getInitializedVolumes(logger logr.Logger, podName string, aeroCluster *asdbv1beta1.AerospikeCluster) []string {
 	logger.Info("Looking for initialized volumes in status.pod initializedVolume", "podname", podName)
 
-	if aeroCluster.Status.Pods[podName].InitializedVolumes != nil {
-		return aeroCluster.Status.Pods[podName].InitializedVolumes
-	}
-
-	logger.Info("Looking for initialized volumes in status.pod initializedVolumePaths", "podname", podName)
-
-	if aeroCluster.Status.Pods[podName].InitializedVolumePaths != nil {
-		return aeroCluster.Status.Pods[podName].InitializedVolumePaths
-	}
-
-	return nil
+	return aeroCluster.Status.Pods[podName].InitializedVolumes
 }
 
 func getDirtyVolumes(logger logr.Logger, podName string, aeroCluster *asdbv1beta1.AerospikeCluster) []string {
@@ -210,7 +212,21 @@ func runBlkdiscard(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard c
 	<-guard
 }
 
-func (initp *InitParams) initVolumes(initializedVolumes []string) ([]string, error) {
+func isVolNeedInitialisation(initializedVolumes []string, volName, pvcUID string) bool {
+	for idx := range initializedVolumes {
+		initVolInfo := strings.Split(initializedVolumes[idx], "@")
+		if initVolInfo[0] == volName {
+			if len(initVolInfo) < 2 || initVolInfo[1] == pvcUID {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
+	initializedVolumes []string) ([]string, error) {
 	var wg sync.WaitGroup
 
 	workerThreads := initp.rack.Storage.CleanupThreads
@@ -220,7 +236,13 @@ func (initp *InitParams) initVolumes(initializedVolumes []string) ([]string, err
 
 	for volIndex := range persistentVolumes {
 		vol := &persistentVolumes[volIndex]
-		if utils.ContainsString(initializedVolumes, vol.Name) {
+
+		pvcUID, err := initp.getPVCUid(ctx, pod, vol.Name)
+		if err != nil {
+			return nil, err
+		}
+
+		if !isVolNeedInitialisation(initializedVolumes, vol.Name, pvcUID) {
 			continue
 		}
 
@@ -282,7 +304,7 @@ func (initp *InitParams) initVolumes(initializedVolumes []string) ([]string, err
 			return volumeNames, fmt.Errorf("invalid volume-mode %s", volume.volumeMode)
 		}
 
-		volumeNames = append(volumeNames, volume.volumeName)
+		volumeNames = append(volumeNames, fmt.Sprintf("%s@%s", volume.volumeName, pvcUID))
 	}
 
 	close(guard)
@@ -481,11 +503,12 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, restartType string) error {
 	podNamespacedName := getNamespacedName(initp.podName, initp.namespace)
 
-	podImage, err := initp.getPodImage(ctx, podNamespacedName)
-	if err != nil {
+	pod := &corev1.Pod{}
+	if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
 		return err
 	}
 
+	podImage := initp.getPodImage(pod)
 	prevImage := ""
 
 	if _, ok := initp.aeroCluster.Status.Pods[initp.podName]; ok {
@@ -501,7 +524,9 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	initp.logger.Info("Checking if initialization needed", "podname", initp.podName, " restart-type", restartType)
 
 	if restartType == "podRestart" {
-		initializedVolumes, err = initp.initVolumes(initializedVolumes)
+		var err error
+
+		initializedVolumes, err = initp.initVolumes(ctx, pod, initializedVolumes)
 		if err != nil {
 			return err
 		}
