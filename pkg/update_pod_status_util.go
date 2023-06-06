@@ -82,7 +82,7 @@ func execute(cmd []string, stderr *os.File) error {
 }
 
 func (initp *InitParams) getPodImage(ctx context.Context, podNamespacedName types.NamespacedName) (string, error) {
-	initp.logger.Info("Get pod image", "podname", podNamespacedName)
+	initp.logger.Info("Get pod image", "podName", podNamespacedName)
 
 	pod := &corev1.Pod{}
 	if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
@@ -93,20 +93,12 @@ func (initp *InitParams) getPodImage(ctx context.Context, podNamespacedName type
 }
 
 func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
-	podPort := initp.networkInfo.podPort
-	servicePort := initp.networkInfo.mappedPort
-
-	if tlsEnabled, _ := strconv.ParseBool(myPodTLSEnabled); tlsEnabled {
-		podPort = initp.networkInfo.podTLSPort
-		servicePort = initp.networkInfo.mappedTLSPort
-	}
-
-	metadata := asdbv1.AerospikePodStatus{
+	metadata := &asdbv1.AerospikePodStatus{
 		PodIP:          initp.networkInfo.podIP,
 		HostInternalIP: initp.networkInfo.internalIP,
 		HostExternalIP: initp.networkInfo.externalIP,
-		PodPort:        int(podPort),
-		ServicePort:    servicePort,
+		PodPort:        int(initp.networkInfo.podPort),
+		PodTLSPort:     int(initp.networkInfo.podTLSPort),
 		Aerospike: asdbv1.AerospikeInstanceSummary{
 			ClusterName: clusterName,
 			NodeID:      initp.nodeID,
@@ -114,7 +106,12 @@ func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
 		},
 	}
 
-	return &metadata
+	if initp.aeroCluster.Spec.PodSpec.MultiPodPerHost && initp.isNodeNetwork() {
+		metadata.ServicePort = initp.networkInfo.mappedPort
+		metadata.ServiceTLSPort = initp.networkInfo.mappedTLSPort
+	}
+
+	return metadata
 }
 
 func getInitializedVolumes(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) []string {
