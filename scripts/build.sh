@@ -16,7 +16,7 @@ fi
 # Push docker image to dockerhub
 make docker-buildx-build-push IMG="$IMG_BASE":"$TAG"
 
-# Push docker image to ECR for tegssting
+# Push docker image to ECR for testing
 ECR_IMG="$AWS_ECR"/"$IMG_BASE":"$TAG"
 make docker-buildx-build-push IMG="$ECR_IMG"
 
