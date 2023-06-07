@@ -24,5 +24,5 @@ make docker-buildx-build-push IMG="$ECR_IMG"
 QUAY_IMG=quay.io/"$IMG_BASE":"$TAG"
 make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-amd64 PLATFORMS=linux/amd64
 make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-arm64 PLATFORMS=linux/arm64
-docker manifest create IMG="$QUAY_IMG" IMG="$QUAY_IMG"-arm64 IMG="$QUAY_IMG"-amd64
-docker manifest push IMG="$QUAY_IMG"
+docker manifest create "$QUAY_IMG" "$QUAY_IMG"-arm64 "$QUAY_IMG"-amd64
+docker manifest push "$QUAY_IMG"
