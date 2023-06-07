@@ -212,22 +212,36 @@ func runBlkdiscard(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard c
 	<-guard
 }
 
-func isVolNeedInitialisation(initializedVolumes []string, volName, pvcUID string) bool {
+func isVolInitialisationNeeded(logger logr.Logger, initializedVolumes []string, volName,
+	pvcUID string) (needInit bool, volumes []string) {
 	for idx := range initializedVolumes {
 		initVolInfo := strings.Split(initializedVolumes[idx], "@")
 		if initVolInfo[0] == volName {
-			if len(initVolInfo) < 2 || initVolInfo[1] == pvcUID {
-				return false
+			if len(initVolInfo) < 2 {
+				initializedVolumes = append(initializedVolumes, fmt.Sprintf("%s@%s", initializedVolumes[idx], pvcUID))
+
+				return false, remove(initializedVolumes, initializedVolumes[idx])
 			}
+
+			if initVolInfo[1] == pvcUID {
+				return false, initializedVolumes
+			}
+
+			logger.Info(fmt.Sprintf("PVC is changed for volume=%s", initVolInfo[0]))
+
+			return true, remove(initializedVolumes, initializedVolumes[idx])
 		}
 	}
 
-	return true
+	return true, initializedVolumes
 }
 
 func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 	initializedVolumes []string) ([]string, error) {
-	var wg sync.WaitGroup
+	var (
+		wg       sync.WaitGroup
+		needInit bool
+	)
 
 	workerThreads := initp.rack.Storage.CleanupThreads
 	persistentVolumes := getPersistentVolumes(getAttachedVolumes(initp.logger, initp.rack))
@@ -242,7 +256,8 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 			return nil, err
 		}
 
-		if !isVolNeedInitialisation(initializedVolumes, vol.Name, pvcUID) {
+		needInit, initializedVolumes = isVolInitialisationNeeded(initp.logger, initializedVolumes, vol.Name, pvcUID)
+		if !needInit {
 			continue
 		}
 
