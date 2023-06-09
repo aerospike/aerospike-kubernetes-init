@@ -217,13 +217,11 @@ func isVolInitialisationNeeded(logger logr.Logger, initializedVolumes []string, 
 	for idx := range initializedVolumes {
 		initVolInfo := strings.Split(initializedVolumes[idx], "@")
 		if initVolInfo[0] == volName {
-			if len(initVolInfo) < 2 {
-				initializedVolumes = append(initializedVolumes, fmt.Sprintf("%s@%s", initializedVolumes[idx], pvcUID))
+			if len(initVolInfo) < 2 || initVolInfo[1] == pvcUID {
+				if len(initVolInfo) < 2 {
+					initializedVolumes[idx] = fmt.Sprintf("%s@%s", initializedVolumes[idx], pvcUID)
+				}
 
-				return false, remove(initializedVolumes, initializedVolumes[idx])
-			}
-
-			if initVolInfo[1] == pvcUID {
 				return false, initializedVolumes
 			}
 
