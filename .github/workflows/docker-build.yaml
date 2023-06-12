@@ -66,8 +66,19 @@ jobs:
 
       - name: Run Snyk image security scan
         uses: snyk/actions/docker@master
+        continue-on-error: true
+        id: docker-image-scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: ${{ env.IMG_BASE }}:${{ env.TAG }}
           args: --file=Dockerfile --severity-threshold=high
+
+      - name: Upload result to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Check docker image scan status
+        if: ${{ steps.docker-image-scan.outcome == 'failure' }}
+        run: exit 1
