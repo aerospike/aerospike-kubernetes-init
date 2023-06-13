@@ -6,7 +6,6 @@ ROOT_DIR=$(shell git rev-parse --show-toplevel)
 # Platforms supported
 PLATFORMS ?= linux/amd64,linux/arm64
 
-IMG_TAGS ?= ""
 VERSION ?= 2.0.0
 # Image URL to use all building/pushing aerospike-kubernetes-init image targets
 IMG ?= aerospike/aerospike-kubernetes-init-nightly:${VERSION}
@@ -74,21 +73,21 @@ run: fmt vet ## Run a akoinit from your host.
 docker-buildx-build: ## Build docker image for the init container for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --load --no-cache --tag ${IMG} --build-arg VERSION=$(VERSION) .
+	docker buildx build --load --no-cache --provenance=false --tag ${IMG} --build-arg VERSION=$(VERSION) .
 	- docker buildx rm project-v3-builder
 
 .PHONY: docker-buildx-build-push
 docker-buildx-build-push: ## Build and push docker image for the init container for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --push --no-cache --platform=$(PLATFORMS) --tag ${IMG} --build-arg VERSION=$(VERSION) .
+	docker buildx build --push --no-cache --provenance=false --platform=$(PLATFORMS) --tag ${IMG} --build-arg VERSION=$(VERSION) .
 	- docker buildx rm project-v3-builder
 
 .PHONY: docker-buildx-build-push-openshift
 docker-buildx-build-push-openshift: ## Build and push docker image for the init container for openshift cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --push --no-cache --platform=$(PLATFORMS) --tag ${IMG} --tag ${IMG_TAGS} --build-arg VERSION=$(VERSION) --build-arg USER=1001 .
+	docker buildx build --push --no-cache --provenance=false --platform=$(PLATFORMS) --tag ${IMG} --build-arg VERSION=$(VERSION) --build-arg USER=1001 .
 	- docker buildx rm project-v3-builder
 
 .PHONY: enable-pre-commit
