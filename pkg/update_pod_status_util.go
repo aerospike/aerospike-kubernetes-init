@@ -217,17 +217,12 @@ func isVolInitialisationNeeded(logger logr.Logger, initializedVolumes []string, 
 	for idx := range initializedVolumes {
 		initVolInfo := strings.Split(initializedVolumes[idx], "@")
 		if initVolInfo[0] == volName {
-			if len(initVolInfo) < 2 || initVolInfo[1] == pvcUID {
-				if len(initVolInfo) < 2 {
-					initializedVolumes[idx] = fmt.Sprintf("%s@%s", initializedVolumes[idx], pvcUID)
-				}
-
-				return false, initializedVolumes
+			if initVolInfo[1] != pvcUID {
+				logger.Info(fmt.Sprintf("PVC is changed for volume=%s", initVolInfo[0]))
+				return true, remove(initializedVolumes, initializedVolumes[idx])
 			}
 
-			logger.Info(fmt.Sprintf("PVC is changed for volume=%s", initVolInfo[0]))
-
-			return true, remove(initializedVolumes, initializedVolumes[idx])
+			return false, initializedVolumes
 		}
 	}
 
@@ -245,6 +240,8 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 	persistentVolumes := getPersistentVolumes(getAttachedVolumes(initp.logger, initp.rack))
 	volumeNames := make([]string, 0, len(persistentVolumes))
 	guard := make(chan struct{}, workerThreads)
+
+	initializedVolumes = removeOldFormattedVolumeName(initializedVolumes)
 
 	for volIndex := range persistentVolumes {
 		vol := &persistentVolumes[volIndex]
@@ -327,6 +324,19 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 	initp.logger.Info("Extended initialised volume list", "initializedVolumes", volumeNames)
 
 	return volumeNames, nil
+}
+
+func removeOldFormattedVolumeName(initializedVolumes []string) []string {
+	initVolumes := make([]string, 0, len(initializedVolumes))
+
+	for idx := range initializedVolumes {
+		initVolInfo := strings.Split(initializedVolumes[idx], "@")
+		if len(initVolInfo) == 2 {
+			initVolumes = append(initVolumes, initializedVolumes[idx])
+		}
+	}
+
+	return initVolumes
 }
 
 func (initp *InitParams) getNamespaceVolumePaths() (
