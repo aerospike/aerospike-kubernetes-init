@@ -50,6 +50,8 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v1
 
       - name: Set image tag env
+        # GITHUB_HEAD_REF will be set in case of PR and contains the branch name.
+        # GITHUB_REF_NAME contains the git tag.
         run: |
           if [[ $GITHUB_HEAD_REF != '' ]]; then
             echo "TAG=$GITHUB_HEAD_REF" >> "$GITHUB_ENV"
