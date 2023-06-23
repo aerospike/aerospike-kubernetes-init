@@ -59,7 +59,6 @@ jobs:
 
       - name: Build and push image
         env:
-          IMG_BASE: ${{ github.repository }}
           REF_TYPE: ${{ github.ref_type }}
           AWS_ECR: "568976754000.dkr.ecr.ap-south-1.amazonaws.com"
         run: ./scripts/build.sh
