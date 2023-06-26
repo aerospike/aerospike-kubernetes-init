@@ -11,7 +11,8 @@ jobs:
   build-and-push:
     name: Build and push image
     runs-on: ubuntu-latest
-
+    env:
+      IMG_BASE: ${{ github.repository }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -48,11 +49,37 @@ jobs:
         if: ${{ github.ref_type == 'tag' }}
         uses: aws-actions/amazon-ecr-login@v1
 
+      - name: Set image tag env
+        # GITHUB_HEAD_REF will be set in case of PR and contains the branch name.
+        # GITHUB_REF_NAME contains the git tag.
+        run: |
+          if [[ $GITHUB_HEAD_REF != '' ]]; then
+            echo "TAG=$GITHUB_HEAD_REF" >> "$GITHUB_ENV"
+          else
+            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          fi
+
       - name: Build and push image
         env:
-          IMG_BASE: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          BRANCH: ${{ github.head_ref }}
           REF_TYPE: ${{ github.ref_type }}
           AWS_ECR: "568976754000.dkr.ecr.ap-south-1.amazonaws.com"
         run: ./scripts/build.sh
+
+      - name: Run Snyk image security scan
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        id: docker-image-scan
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          image: ${{ env.IMG_BASE }}:${{ env.TAG }}
+          args: --file=Dockerfile --severity-threshold=high
+
+      - name: Upload result to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Check docker image scan status
+        if: ${{ steps.docker-image-scan.outcome == 'failure' }}
+        run: exit 1

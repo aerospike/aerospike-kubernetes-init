@@ -73,7 +73,7 @@ run: fmt vet ## Run a akoinit from your host.
 docker-buildx-build: ## Build docker image for the init container for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --no-cache --provenance=false --platform=$(PLATFORMS) --tag ${IMG} --build-arg VERSION=$(VERSION) .
+	docker buildx build --load --no-cache --provenance=false --tag ${IMG} --build-arg VERSION=$(VERSION) .
 	- docker buildx rm project-v3-builder
 
 .PHONY: docker-buildx-build-push
