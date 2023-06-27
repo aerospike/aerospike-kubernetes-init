@@ -12,16 +12,17 @@ import (
 )
 
 const (
-	aerospikeConf      = "/etc/aerospike/aerospike.template.conf"
-	peers              = "/etc/aerospike/peers"
-	access             = "access"
-	alternateAccess    = "alternate-access"
-	tlsAccess          = "tls-access"
-	tlsAlternateAccess = "tls-alternate-access"
+	aerospikeTemplateConf = "/etc/aerospike/aerospike.template.conf"
+	aerospikeConf         = "/etc/aerospike/aerospike.conf"
+	peers                 = "/etc/aerospike/peers"
+	access                = "access"
+	alternateAccess       = "alternate-access"
+	tlsAccess             = "tls-access"
+	tlsAlternateAccess    = "tls-alternate-access"
 )
 
 func (initp *InitParams) createAerospikeConf() error {
-	data, err := os.ReadFile(aerospikeConf)
+	data, err := os.ReadFile(aerospikeTemplateConf)
 	if err != nil {
 		return err
 	}
@@ -122,6 +123,10 @@ func (initp *InitParams) createAerospikeConf() error {
 	}
 
 	if err = os.WriteFile(aerospikeConf, []byte(confString), 0644); err != nil { //nolint:gocritic,gosec // file permission
+		return err
+	}
+
+	if err := os.Remove(aerospikeTemplateConf); err != nil {
 		return err
 	}
 
