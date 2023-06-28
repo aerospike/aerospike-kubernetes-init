@@ -118,7 +118,7 @@ func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
 		},
 	}
 
-	if initp.aeroCluster.Spec.PodSpec.MultiPodPerHost && initp.isNodeNetwork() {
+	if initp.isNodeNetwork() {
 		metadata.ServicePort = initp.networkInfo.mappedPort
 		metadata.ServiceTLSPort = initp.networkInfo.mappedTLSPort
 	}
