@@ -105,12 +105,18 @@ func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName
 }
 
 func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
+	podPort := initp.networkInfo.podPort
+
+	tlsEnabled, _ := strconv.ParseBool(myPodTLSEnabled)
+	if tlsEnabled {
+		podPort = initp.networkInfo.podTLSPort
+	}
+
 	metadata := &asdbv1.AerospikePodStatus{
 		PodIP:          initp.networkInfo.podIP,
 		HostInternalIP: initp.networkInfo.internalIP,
 		HostExternalIP: initp.networkInfo.externalIP,
-		PodPort:        int(initp.networkInfo.podPort),
-		PodTLSPort:     int(initp.networkInfo.podTLSPort),
+		PodPort:        int(podPort),
 		Aerospike: asdbv1.AerospikeInstanceSummary{
 			ClusterName: clusterName,
 			NodeID:      initp.nodeID,
@@ -120,7 +126,9 @@ func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
 
 	if initp.isNodeNetwork() {
 		metadata.ServicePort = initp.networkInfo.mappedPort
-		metadata.ServiceTLSPort = initp.networkInfo.mappedTLSPort
+		if tlsEnabled {
+			metadata.ServicePort = initp.networkInfo.mappedTLSPort
+		}
 	}
 
 	return metadata
