@@ -122,6 +122,10 @@ func (initp *InitParams) createAerospikeConf() error {
 		}
 	}
 
+	// Remove escape sequence from LDAP configuration if any
+	confString = strings.ReplaceAll(confString, "$${_DNE}{un}", "${un}")
+	confString = strings.ReplaceAll(confString, "$${_DNE}{dn}", "${dn}")
+
 	if err = os.WriteFile(aerospikeConf, []byte(confString), 0644); err != nil { //nolint:gocritic,gosec // file permission
 		return err
 	}
@@ -153,7 +157,8 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		mappedPort = initp.networkInfo.mappedTLSPort
 	}
 
-	switch networkType { //nolint:exhaustive // fallback to default
+	//nolint:exhaustive // fallback to default
+	switch networkType {
 	case asdbv1.AerospikeNetworkTypePod:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
 		accessPort = podPort
