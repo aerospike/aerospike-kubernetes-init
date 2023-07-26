@@ -46,7 +46,7 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
 	}
 
-	if tlsEnabled, _ := strconv.ParseBool(myPodTLSEnabled); tlsEnabled {
+	if initp.tlsName != "" {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customTLSAccessNetworkIPs, confString)
