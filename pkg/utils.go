@@ -162,7 +162,11 @@ func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCl
 }
 
 func (initp *InitParams) makeWorkDir() error {
-	if initp.workDir != "" {
+	// defaultWorkDirectory already has the required dirs
+	// if initp.workDir == defaultWorkDirectory then
+	// it means that user has not provided any workDir in storage.volumes spec.
+	defaultWorkDirectory := "/opt/aerospike"
+	if initp.workDir != "" && initp.workDir != defaultWorkDirectory {
 		defaultWorkDir := filepath.Join("workdir", "filesystem-volumes", initp.workDir)
 
 		requiredDirs := [3]string{"smd", "usr/udf/lua", "xdr"}
