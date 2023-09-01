@@ -17,8 +17,7 @@ import (
 )
 
 var (
-	myPodTLSEnabled = os.Getenv("MY_POD_TLS_ENABLED")
-	clusterName     = os.Getenv("MY_POD_CLUSTER_NAME")
+	clusterName = os.Getenv("MY_POD_CLUSTER_NAME")
 )
 
 type InitParams struct {
@@ -31,6 +30,7 @@ type InitParams struct {
 	rackID      string
 	nodeID      string
 	workDir     string
+	tlsName     string
 	logger      logr.Logger
 }
 
@@ -88,6 +88,8 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	workDir := asdbv1.GetWorkDirectory(rack.AerospikeConfig)
 	volume := rack.Storage.GetVolumeForAerospikePath(workDir)
 
+	tlsName, _ := asdbv1.GetServiceTLSNameAndPort(aeroCluster.Spec.AerospikeConfig)
+
 	if volume != nil {
 		// Init container mounts all volumes by name. Update workdir to reflect that path.
 		// For example
@@ -110,6 +112,7 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		nodeID:      nodeID,
 		workDir:     workDir,
 		logger:      logger,
+		tlsName:     tlsName,
 	}
 
 	if err := initParams.setNetworkInfo(ctx); err != nil {
