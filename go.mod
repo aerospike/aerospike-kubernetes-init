@@ -3,7 +3,7 @@ module github.com/aerospike/aerospike-kubernetes-init
 go 1.19
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20231010134031-c9ad8f65c913
+	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20231011121336-4833e7561f4e
 	github.com/go-logr/logr v1.2.4
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
 	github.com/mitchellh/go-ps v1.0.0
@@ -15,9 +15,15 @@ require (
 	sigs.k8s.io/controller-runtime v0.14.5
 )
 
+// Pinned this dependcy to fix vulnerbaility in `golang.org/x/net` pkg
+replace golang.org/x/net => golang.org/x/net v0.17.0
+
+// Pinned this dependcy to fix vulnerbaility in `google.golang.org/grpc` pkg
+replace google.golang.org/grpc => google.golang.org/grpc v1.56.3
+
 require (
 	github.com/aerospike/aerospike-client-go/v6 v6.14.0 // indirect
-	github.com/aerospike/aerospike-management-lib v0.0.0-20231010113547-53db625da005 // indirect
+	github.com/aerospike/aerospike-management-lib v0.0.0-20231011120735-bbe52c613baa // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -60,16 +66,16 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.11.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/oauth2 v0.5.0 // indirect
+	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
-	golang.org/x/sys v0.10.0 // indirect
-	golang.org/x/term v0.10.0 // indirect
-	golang.org/x/text v0.11.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
+	golang.org/x/term v0.13.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230110181048-76db0878b65f // indirect
+	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
 	google.golang.org/grpc v1.54.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
