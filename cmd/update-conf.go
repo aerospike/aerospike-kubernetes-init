@@ -27,7 +27,7 @@ import (
 var confUpdate = &cobra.Command{
 	Use:   "update-conf",
 	Short: "update conf init functionality",
-	Long:  `This command updates conf file of aerospike server and updating CR status.`,
+	Long:  `This command updates conf file of aerospike server and CR status.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := goctx.TODO()
 
