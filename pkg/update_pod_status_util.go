@@ -613,18 +613,22 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		// Customize the error check for retrying, return true to retry, false to stop retrying
 		return true
 	}, func() error {
+		if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
+			return err
+		}
+
 		// Patch the resource
 		if err := initp.k8sClient.Update(ctx, pod); err != nil {
 			return err
 		}
 
-		initp.logger.Info("Pod status patched successfully", "podname", initp.podName)
+		initp.logger.Info("Patched/updated pod annotation successfully", "podname", initp.podName)
 		return nil
 	}); err != nil {
 		return err
 	}
 
-	initp.logger.Info("Updating pod status", "podname", initp.podName)
+	initp.logger.Info("Updating pod status in CR", "podname", initp.podName)
 
 	return initp.updateStatus(ctx, metadata)
 }
