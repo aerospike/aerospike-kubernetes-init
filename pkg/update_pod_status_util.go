@@ -597,6 +597,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.Image = podImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
+	metadata.DynamicConfigFailed = false
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {
@@ -660,7 +661,6 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 	metadata.Aerospike.AlternateAccessEndpoints = initp.getEndpoints(alternateAccess)
 	metadata.Aerospike.TLSAccessEndpoints = initp.getEndpoints(tlsAccess)
 	metadata.Aerospike.TLSAlternateAccessEndpoints = initp.getEndpoints(tlsAlternateAccess)
-	metadata.DynamicConfigFailed = false
 
 	var patches []jsonpatch.JsonPatchOperation
 
