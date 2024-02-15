@@ -603,12 +603,6 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		return err
 	}
 
-	if pod.Annotations == nil {
-		pod.Annotations = make(map[string]string)
-	}
-
-	pod.Annotations["aerospikeConf"] = string(data)
-
 	if err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
 		// Customize the error check for retrying, return true to retry, false to stop retrying
 		return true
@@ -616,6 +610,12 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
 			return err
 		}
+
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string)
+		}
+
+		pod.Annotations["aerospikeConf"] = string(data)
 
 		// Patch the resource
 		if err := initp.k8sClient.Update(ctx, pod); err != nil {
@@ -660,6 +660,7 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 	metadata.Aerospike.AlternateAccessEndpoints = initp.getEndpoints(alternateAccess)
 	metadata.Aerospike.TLSAccessEndpoints = initp.getEndpoints(tlsAccess)
 	metadata.Aerospike.TLSAlternateAccessEndpoints = initp.getEndpoints(tlsAlternateAccess)
+	metadata.DynamicConfigFailed = false
 
 	var patches []jsonpatch.JsonPatchOperation
 
