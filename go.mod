@@ -15,12 +15,6 @@ require (
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
-// Pinned this dependcy to fix vulnerbaility in `golang.org/x/net` pkg
-replace golang.org/x/net => golang.org/x/net v0.17.0
-
-// Pinned this dependcy to fix vulnerbaility in `google.golang.org/grpc` pkg
-replace google.golang.org/grpc => google.golang.org/grpc v1.56.3
-
 require (
 	github.com/aerospike/aerospike-client-go/v6 v6.14.0 // indirect
 	github.com/aerospike/aerospike-management-lib v1.2.1-0.20240129073609-fa537ce5d006 // indirect
