@@ -18,7 +18,7 @@ make docker-buildx-build-push IMG="$IMG_BASE":"$TAG" EXTRA_TAG="$IMG_BASE":lates
 
 # Push docker image to ECR for testing
 ECR_IMG_BASE="$AWS_ECR"/"$IMG_BASE"
-make docker-buildx-build-push IMG="$ECR_IMG":"$TAG" EXTRA_TAG="$ECR_IMG_BASE":latest
+make docker-buildx-build-push IMG="$ECR_IMG_BASE":"$TAG" EXTRA_TAG="$ECR_IMG_BASE":latest
 
 # Push docker image to Quay with non-root user
 QUAY_IMG_BASE=quay.io/"$IMG_BASE"
