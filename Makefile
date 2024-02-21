@@ -9,6 +9,7 @@ PLATFORMS ?= linux/amd64,linux/arm64
 VERSION ?= 2.1.0
 # Image URL to use all building/pushing aerospike-kubernetes-init image targets
 IMG ?= aerospike/aerospike-kubernetes-init-nightly:${VERSION}
+EXTRA_TAG ?= ${IMG}
 
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
@@ -73,14 +74,14 @@ run: fmt vet ## Run a akoinit from your host.
 docker-buildx-build: ## Build docker image for the init container for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --load --no-cache --provenance=false --tag ${IMG} --build-arg VERSION=$(VERSION) .
+	docker buildx build --load --no-cache --provenance=false --tag ${IMG} --tag ${EXTRA_TAG} --build-arg VERSION=$(VERSION) .
 	- docker buildx rm project-v3-builder
 
 .PHONY: docker-buildx-build-push
 docker-buildx-build-push: ## Build and push docker image for the init container for cross-platform support
 	- docker buildx create --name project-v3-builder
 	docker buildx use project-v3-builder
-	docker buildx build --push --no-cache --provenance=false --platform=$(PLATFORMS) --tag ${IMG} --build-arg VERSION=$(VERSION) .
+	docker buildx build --push --no-cache --provenance=false --platform=$(PLATFORMS) --tag ${IMG} --tag ${EXTRA_TAG} --build-arg VERSION=$(VERSION) .
 	- docker buildx rm project-v3-builder
 
 .PHONY: docker-buildx-build-push-openshift

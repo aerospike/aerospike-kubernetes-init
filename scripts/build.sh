@@ -14,15 +14,12 @@ if [ "$REF_TYPE" != 'tag' ]; then
 fi
 
 # Push docker image to dockerhub
-make docker-buildx-build-push IMG="$IMG_BASE":"$TAG"
+make docker-buildx-build-push IMG="$IMG_BASE":"$TAG" EXTRA_TAG="$IMG_BASE":latest
 
 # Push docker image to ECR for testing
-ECR_IMG="$AWS_ECR"/"$IMG_BASE":"$TAG"
-make docker-buildx-build-push IMG="$ECR_IMG"
+ECR_IMG_BASE="$AWS_ECR"/"$IMG_BASE"
+make docker-buildx-build-push IMG="$ECR_IMG":"$TAG" EXTRA_TAG="$ECR_IMG_BASE":latest
 
-# Push docker image to Quay. Here docker manifest is created separately to tag each child manifest with individual arch related tag
-QUAY_IMG=quay.io/"$IMG_BASE":"$TAG"
-make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-amd64 PLATFORMS=linux/amd64
-make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-arm64 PLATFORMS=linux/arm64
-docker manifest create "$QUAY_IMG" "$QUAY_IMG"-arm64 "$QUAY_IMG"-amd64
-docker manifest push "$QUAY_IMG"
+# Push docker image to Quay with non-root user
+QUAY_IMG_BASE=quay.io/"$IMG_BASE"
+make docker-buildx-build-push-openshift IMG="$QUAY_IMG_BASE":"$TAG" EXTRA_TAG="$QUAY_IMG_BASE":latest
