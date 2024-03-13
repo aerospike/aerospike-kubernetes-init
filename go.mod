@@ -1,6 +1,8 @@
 module github.com/aerospike/aerospike-kubernetes-init
 
-go 1.19
+go 1.21
+
+toolchain go1.21.8
 
 require (
 	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240109121520-2fde8c33fbb8
