@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.8
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240109121520-2fde8c33fbb8
+	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240314071322-60543658d6d3
 	github.com/go-logr/logr v1.3.0
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
 	github.com/mitchellh/go-ps v1.0.0
@@ -19,7 +19,7 @@ require (
 
 require (
 	github.com/aerospike/aerospike-client-go/v6 v6.14.0 // indirect
-	github.com/aerospike/aerospike-management-lib v0.0.0-20231229132959-08273f7a41b7 // indirect
+	github.com/aerospike/aerospike-management-lib v1.2.1 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -76,7 +76,7 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230822172742-b8732ec3820d // indirect
 	google.golang.org/grpc v1.58.3 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
