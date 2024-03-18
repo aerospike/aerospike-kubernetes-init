@@ -84,7 +84,7 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 	initp.logger.Info("Gathering network related info")
 
 	initp.networkInfo = &networkInfo{
-		multiPodPerHost: initp.aeroCluster.Spec.PodSpec.MultiPodPerHost,
+		multiPodPerHost: asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost),
 		networkPolicy:   initp.aeroCluster.Spec.AerospikeNetworkPolicy,
 		hostNetwork:     initp.aeroCluster.Spec.PodSpec.HostNetwork,
 		hostIP:          os.Getenv("MY_HOST_IP"),
@@ -188,7 +188,7 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 
 	// Sets up port related variables.
 	// User service ports only when MultiPodPerHost is true and node network is defined in NetworkPolicy
-	if initp.aeroCluster.Spec.PodSpec.MultiPodPerHost && initp.isNodeNetwork() {
+	if asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) && initp.isNodeNetwork() {
 		if netInfo.mappedPort, netInfo.mappedTLSPort, err = getPorts(
 			ctx, initp.k8sClient, initp.aeroCluster.Namespace, initp.podName); err != nil {
 			return err

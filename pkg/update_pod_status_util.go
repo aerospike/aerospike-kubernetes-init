@@ -606,7 +606,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.Image = podImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
-	metadata.SecurityEnabled = securityEnabled
+	metadata.IsSecurityEnabled = securityEnabled
 
 	initp.logger.Info("Updating pod status", "podname", initp.podName)
 
