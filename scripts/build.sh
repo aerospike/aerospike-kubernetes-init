@@ -20,9 +20,6 @@ make docker-buildx-build-push IMG="$IMG_BASE":"$TAG"
 ECR_IMG="$AWS_ECR"/"$IMG_BASE":"$TAG"
 make docker-buildx-build-push IMG="$ECR_IMG"
 
-# Push docker image to Quay. Here docker manifest is created separately to tag each child manifest with individual arch related tag
+# Push docker image to Quay with non-root user
 QUAY_IMG=quay.io/"$IMG_BASE":"$TAG"
-make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-amd64 PLATFORMS=linux/amd64
-make docker-buildx-build-push-openshift IMG="$QUAY_IMG"-arm64 PLATFORMS=linux/arm64
-docker manifest create "$QUAY_IMG" "$QUAY_IMG"-arm64 "$QUAY_IMG"-amd64
-docker manifest push "$QUAY_IMG"
+make docker-buildx-build-push-openshift IMG="$QUAY_IMG"
