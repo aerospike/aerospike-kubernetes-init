@@ -3,7 +3,6 @@ package pkg
 import (
 	goctx "context"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -27,7 +26,6 @@ type InitParams struct {
 	networkInfo *networkInfo
 	podName     string
 	namespace   string
-	rackID      string
 	nodeID      string
 	workDir     string
 	tlsName     string
@@ -108,7 +106,6 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		k8sClient:   k8sClient,
 		podName:     podName,
 		namespace:   namespace,
-		rackID:      strconv.Itoa(rack.ID),
 		nodeID:      nodeID,
 		workDir:     workDir,
 		logger:      logger,

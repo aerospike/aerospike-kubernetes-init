@@ -29,12 +29,7 @@ func (initp *InitParams) createAerospikeConf() error {
 
 	confString := string(data)
 
-	// Update node and rack ids configuration file
-	re := regexp.MustCompile("rack-id.*0")
-	if rackStr := re.FindString(confString); rackStr != "" {
-		confString = strings.ReplaceAll(confString, rackStr, "rack-id    "+initp.rackID)
-	}
-
+	// Update node ids in configuration file
 	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
 
 	if initp.networkInfo.podPort != 0 {
@@ -78,7 +73,7 @@ func (initp *InitParams) createAerospikeConf() error {
 
 	fileScanner := bufio.NewScanner(readFile)
 
-	//  Update mesh seeds in the configuration file
+	// Update mesh seeds in the configuration file
 	for fileScanner.Scan() {
 		peer := fileScanner.Text()
 		if strings.Contains(peer, initp.podName) {
