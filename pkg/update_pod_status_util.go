@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
@@ -606,9 +607,40 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.Image = podImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
+	metadata.DynamicConfigFailed = false
 	metadata.IsSecurityEnabled = securityEnabled
 
-	initp.logger.Info("Updating pod status", "podname", initp.podName)
+	data, err := os.ReadFile(aerospikeConf)
+	if err != nil {
+		return err
+	}
+
+	if err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+		// Customize the error check for retrying, return true to retry, false to stop retrying
+		return true
+	}, func() error {
+		if err := initp.k8sClient.Get(ctx, podNamespacedName, pod); err != nil {
+			return err
+		}
+
+		if pod.Annotations == nil {
+			pod.Annotations = make(map[string]string)
+		}
+
+		pod.Annotations["aerospikeConf"] = string(data)
+
+		// Patch the resource
+		if err := initp.k8sClient.Update(ctx, pod); err != nil {
+			return err
+		}
+
+		initp.logger.Info("Patched/updated pod annotation successfully", "podname", initp.podName)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	initp.logger.Info("Updating pod status in CR", "podname", initp.podName)
 
 	return initp.updateStatus(ctx, metadata)
 }
