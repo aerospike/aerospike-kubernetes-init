@@ -607,7 +607,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.Image = podImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
-	metadata.DynamicConfigFailed = false
+	metadata.DynamicConfigUpdateStatus = ""
 	metadata.IsSecurityEnabled = securityEnabled
 
 	data, err := os.ReadFile(aerospikeConf)
