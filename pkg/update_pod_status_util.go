@@ -593,29 +593,18 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		}
 	}
 
-	ver, err := asdbv1.GetImageVersion(initp.aeroCluster.Spec.Image)
-	if err != nil {
-		return err
-	}
-
-	securityEnabled, err := asdbv1.IsSecurityEnabled(ver, initp.aeroCluster.Spec.AerospikeConfig)
-	if err != nil {
-		return err
-	}
-
 	metadata := initp.getNodeMetadata()
 	metadata.Image = podImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
-	metadata.IsSecurityEnabled = securityEnabled
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {
 		return err
 	}
 
-	if err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+	if err := retry.OnError(retry.DefaultBackoff, func(_ error) bool {
 		// Customize the error check for retrying, return true to retry, false to stop retrying
 		return true
 	}, func() error {
