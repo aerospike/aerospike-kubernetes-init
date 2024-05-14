@@ -82,10 +82,10 @@ func execute(cmd []string, stderr *os.File) error {
 	return command.Run()
 }
 
-func (initp *InitParams) getPodImage(pod *corev1.Pod) string {
+func (initp *InitParams) getPodImages(pod *corev1.Pod) (serverImage, initImage string) {
 	initp.logger.Info("Get pod image", "podName", pod.Name)
 
-	return pod.Spec.Containers[0].Image
+	return pod.Spec.Containers[0].Image, pod.Spec.InitContainers[0].Image
 }
 
 func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName string) (string, error) {
@@ -536,7 +536,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		return err
 	}
 
-	podImage := initp.getPodImage(pod)
+	podImage, podInitImage := initp.getPodImages(pod)
 	prevImage := ""
 
 	if _, ok := initp.aeroCluster.Status.Pods[initp.podName]; ok {
@@ -595,6 +595,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 
 	metadata := initp.getNodeMetadata()
 	metadata.Image = podImage
+	metadata.InitImage = podInitImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
