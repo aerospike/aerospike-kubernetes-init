@@ -82,10 +82,10 @@ func execute(cmd []string, stderr *os.File) error {
 	return command.Run()
 }
 
-func (initp *InitParams) getPodImage(pod *corev1.Pod) string {
+func (initp *InitParams) getPodImages(pod *corev1.Pod) (serverImage, initImage string) {
 	initp.logger.Info("Get pod image", "podName", pod.Name)
 
-	return pod.Spec.Containers[0].Image
+	return pod.Spec.Containers[0].Image, pod.Spec.InitContainers[0].Image
 }
 
 func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName string) (string, error) {
@@ -536,7 +536,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		return err
 	}
 
-	podImage := initp.getPodImage(pod)
+	podImage, podInitImage := initp.getPodImages(pod)
 	prevImage := ""
 
 	if _, ok := initp.aeroCluster.Status.Pods[initp.podName]; ok {
@@ -593,29 +593,19 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		}
 	}
 
-	ver, err := asdbv1.GetImageVersion(initp.aeroCluster.Spec.Image)
-	if err != nil {
-		return err
-	}
-
-	securityEnabled, err := asdbv1.IsSecurityEnabled(ver, initp.aeroCluster.Spec.AerospikeConfig)
-	if err != nil {
-		return err
-	}
-
 	metadata := initp.getNodeMetadata()
 	metadata.Image = podImage
+	metadata.InitImage = podInitImage
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
-	metadata.IsSecurityEnabled = securityEnabled
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {
 		return err
 	}
 
-	if err := retry.OnError(retry.DefaultBackoff, func(err error) bool {
+	if err := retry.OnError(retry.DefaultBackoff, func(_ error) bool {
 		// Customize the error check for retrying, return true to retry, false to stop retrying
 		return true
 	}, func() error {
