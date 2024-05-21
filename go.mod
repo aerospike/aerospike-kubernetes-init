@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.8
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240520115812-89b72d17d4ac
+	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240521093729-e3bc2e7dd47c
 	github.com/go-logr/logr v1.4.1
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
 	github.com/mitchellh/go-ps v1.0.0
