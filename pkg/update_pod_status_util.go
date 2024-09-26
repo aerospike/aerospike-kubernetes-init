@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	"gomodules.xyz/jsonpatch/v2"
+	jp "gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -663,9 +663,9 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 	metadata.Aerospike.TLSAccessEndpoints = initp.getEndpoints(tlsAccess)
 	metadata.Aerospike.TLSAlternateAccessEndpoints = initp.getEndpoints(tlsAlternateAccess)
 
-	var patches []jsonpatch.JsonPatchOperation
+	var patches []jp.JsonPatchOperation
 
-	patch := jsonpatch.JsonPatchOperation{
+	patch := jp.JsonPatchOperation{
 		Operation: "replace",
 		Path:      "/status/pods/" + initp.podName,
 		Value:     *metadata,
