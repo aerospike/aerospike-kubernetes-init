@@ -29,7 +29,7 @@ var coldRestart = &cobra.Command{
 	Short: "cold-restart init functionality",
 	Long: `This command runs complete init container functionality
 during pod start and subsequent cold restarts.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		ctx := goctx.TODO()
 
 		initParams, err := pkg.PopulateInitParams(ctx)

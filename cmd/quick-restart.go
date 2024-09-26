@@ -34,7 +34,7 @@ var quickRestart = &cobra.Command{
 	Short: "quick restart init functionality",
 	Long: `This command runs quick restart functionality like
 restart asd process in server and updating CR status.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		ctx := goctx.TODO()
 
 		initParams, err := pkg.PopulateInitParams(ctx)
