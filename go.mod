@@ -3,7 +3,7 @@ module github.com/aerospike/aerospike-kubernetes-init
 go 1.22
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20240913053747-457c7c1f350d
+	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20241001083134-aa051f72de96
 	github.com/go-logr/logr v1.4.2
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.4.0
 	github.com/mitchellh/go-ps v1.0.0
@@ -17,7 +17,7 @@ require (
 
 require (
 	github.com/aerospike/aerospike-client-go/v7 v7.6.1 // indirect
-	github.com/aerospike/aerospike-management-lib v1.4.0 // indirect
+	github.com/aerospike/aerospike-management-lib v1.5.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20210307081110-f21760c49a8d // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -85,3 +85,6 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+// Fixing vulnerability SNYK-GOLANG-GITHUBCOMSIRUPSENLOGRUS-5564391
+replace github.com/sirupsen/logrus => github.com/sirupsen/logrus v1.9.1
