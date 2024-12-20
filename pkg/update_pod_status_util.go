@@ -206,15 +206,17 @@ func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan stru
 	<-guard
 }
 
-func runBlkdiscard(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan struct{}) {
+func runBlkdiscard(logger logr.Logger, cmdList [][]string, wg *sync.WaitGroup, guard chan struct{}) {
 	defer wg.Done()
+	defer func() { <-guard }() // Ensure the guard channel is released
 
-	if err := execute(cmd, nil); err != nil {
-		panic(err.Error())
+	for _, cmd := range cmdList {
+		if err := execute(cmd, nil); err != nil {
+			panic(err.Error())
+		}
+
+		logger.Info("Execution completed", "cmd", cmd)
 	}
-
-	logger.Info("Execution completed", "cmd", cmd)
-	<-guard
 }
 
 func isVolInitialisationNeeded(logger logr.Logger, initializedVolumes []string, volName,
@@ -281,13 +283,16 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
 
 			case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-				blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
+				blkdiscardCmds := [][]string{
+					{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()},
+					{string(asdbv1.AerospikeVolumeMethodBlkdiscard), "-z", "--length", "8MiB", volume.getMountPoint()},
+				}
 
 				wg.Add(1)
 				guard <- struct{}{}
 
-				go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
+				go runBlkdiscard(initp.logger, blkdiscardCmds, &wg, guard)
+				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscardCmds, *volume))
 
 			case "none":
 				initp.logger.Info(fmt.Sprintf("Pass through for volume=%+v", *volume))
@@ -417,13 +422,16 @@ func (initp *InitParams) cleanDirtyVolumes(dirtyVolumes, nsDevicePaths []string)
 				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
 
 			case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-				blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
+				blkdiscardCmds := [][]string{
+					{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()},
+					{string(asdbv1.AerospikeVolumeMethodBlkdiscard), "-z", "--length", "8MiB", volume.getMountPoint()},
+				}
 
 				wg.Add(1)
 				guard <- struct{}{}
 
-				go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
+				go runBlkdiscard(initp.logger, blkdiscardCmds, &wg, guard)
+				initp.logger.Info(fmt.Sprintf("Commands submitted %v for volume=%+v", blkdiscardCmds, *volume))
 
 			default:
 				return dirtyVolumes, fmt.Errorf("invalid effective_wipe_method %s", volume.effectiveWipeMethod)
@@ -475,13 +483,16 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 					initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
 
 				case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-					blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
+					blkdiscardCmds := [][]string{
+						{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()},
+						{string(asdbv1.AerospikeVolumeMethodBlkdiscard), "-z", "--length", "8MiB", volume.getMountPoint()},
+					}
 
 					wg.Add(1)
 					guard <- struct{}{}
 
-					go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-					initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
+					go runBlkdiscard(initp.logger, blkdiscardCmds, &wg, guard)
+					initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscardCmds, *volume))
 
 				default:
 					return dirtyVolumes, fmt.Errorf("invalid effective_init_method %s", volume.effectiveInitMethod)
