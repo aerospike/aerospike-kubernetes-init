@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -321,9 +322,9 @@ func getHostIPS(ctx context.Context, k8sClient client.Client, hostIP string) (
 				matchFound = true
 			}
 
-			if add.Type == corev1.NodeInternalIP {
+			if add.Type == corev1.NodeInternalIP && net.ParseIP(add.Address).To4() != nil {
 				nodeInternalIP = add.Address
-			} else if add.Type == corev1.NodeExternalIP {
+			} else if add.Type == corev1.NodeExternalIP && net.ParseIP(add.Address).To4() != nil {
 				nodeExternalIP = add.Address
 			}
 		}
@@ -377,14 +378,14 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	networkSet := sets.NewString(networks...)
 
 	for idx := range netStatuses {
-		net := &netStatuses[idx]
-		if networkSet.Has(net.Name) {
-			if len(net.IPs) == 0 {
+		network := &netStatuses[idx]
+		if networkSet.Has(network.Name) {
+			if len(network.IPs) == 0 {
 				return networkIPs, fmt.Errorf("ips list empty for network %s in pod annotations key %s",
-					net.Name, networkStatusAnnotation)
+					network.Name, networkStatusAnnotation)
 			}
 
-			networkIPs = append(networkIPs, net.IPs...)
+			networkIPs = append(networkIPs, network.IPs...)
 		}
 	}
 

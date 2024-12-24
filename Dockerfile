@@ -2,7 +2,7 @@
 # Aerospike Kubernetes Operator Init Container.
 #
 # Build the akoinit binary
-FROM --platform=$BUILDPLATFORM golang:1.22 as builder
+FROM --platform=$BUILDPLATFORM golang:1.22 AS builder
 
 # OS and Arch args
 ARG TARGETOS
@@ -65,7 +65,7 @@ RUN microdnf update -y \
     && microdnf clean all
 
 # Add /workdir/bin to PATH
-ENV PATH "/workdir/bin:$PATH"
+ENV PATH="/workdir/bin:$PATH"
 
 # For RedHat Openshift, set this to non-root user ID 1001 using
 # --build-arg USER=1001 as docker build argument.
