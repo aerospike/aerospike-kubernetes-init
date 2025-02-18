@@ -2,6 +2,8 @@ module github.com/aerospike/aerospike-kubernetes-init
 
 go 1.22.0
 
+toolchain go1.22.7
+
 require (
 	github.com/aerospike/aerospike-kubernetes-operator v0.0.0-20250218113451-63dd7bce1056
 	github.com/go-logr/logr v1.4.2
