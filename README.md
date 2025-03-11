@@ -12,7 +12,7 @@ runs in an init-container at the time of Aerospike cluster deployment to perform
 Run the following command with the appropriate name and version for the init image.
 
 ```shell
-make docker-buildx-build-push IMG=aerospike/aerospike-kubernetes-init:2.2.0 VERSION=2.2.0
+make docker-buildx-build-push IMG=aerospike/aerospike-kubernetes-init:2.2.5 VERSION=2.2.5
 ```
 
 For using this new init image with Aerospike Kubernetes Operator, update the init image name and tag in AKO code base 
