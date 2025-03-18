@@ -181,15 +181,17 @@ func newVolume(podName string, vol *asdbv1.VolumeSpec) *Volume {
 
 func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan struct{}) {
 	stderr, err := os.CreateTemp("/tmp", "init-stderr")
-	if err != nil {
-		panic(err.Error())
-	}
 
 	defer func() {
 		stderr.Close()
 		os.Remove(stderr.Name())
+		<-guard
 		wg.Done()
 	}()
+
+	if err != nil {
+		panic(err.Error())
+	}
 
 	if err := execute(cmd, stderr); err != nil {
 		dat, err := os.ReadFile(stderr.Name())
@@ -203,12 +205,13 @@ func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan stru
 	}
 
 	logger.Info("Execution completed", "cmd", cmd)
-	<-guard
 }
 
 func runBlkdiscard(logger logr.Logger, cmdList [][]string, wg *sync.WaitGroup, guard chan struct{}) {
-	defer wg.Done()
-	defer func() { <-guard }() // Ensure the guard channel is released
+	defer func() {
+		<-guard // Ensure the guard channel is released
+		wg.Done()
+	}()
 
 	for _, cmd := range cmdList {
 		if err := execute(cmd, nil); err != nil {
@@ -272,9 +275,7 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 
 		switch volume.volumeMode {
 		case string(corev1.PersistentVolumeBlock):
-			initp.logger.Info(fmt.Sprintf("Initialising volume=%+v method=%s", *volume, volume.effectiveInitMethod))
-
-			if err := initp.cleanVolume(volume, &wg, guard, true); err != nil {
+			if err := initp.cleanBlockVolume(volume, &wg, guard, true); err != nil {
 				return volumeNames, err
 			}
 
@@ -382,13 +383,15 @@ func (initp *InitParams) cleanDirtyVolumes(dirtyVolumes, nsDevicePaths []string)
 			continue
 		}
 
+		initp.logger.Info(fmt.Sprintf("Cleaning dirty volume=%s", vol.Name))
+
 		volume := newVolume(initp.podName, vol)
 		if volume.volumeMode == string(corev1.PersistentVolumeBlock) {
 			if _, err := os.Stat(volume.getMountPoint()); err != nil {
 				return dirtyVolumes, fmt.Errorf("mounting point %s does not exist %v", volume.getMountPoint(), err)
 			}
 
-			if err := initp.cleanVolume(volume, &wg, guard, false); err != nil {
+			if err := initp.cleanBlockVolume(volume, &wg, guard, false); err != nil {
 				return dirtyVolumes, err
 			}
 
@@ -426,7 +429,7 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 					return dirtyVolumes, fmt.Errorf("mounting point %s does not exist %v", volume.getMountPoint(), err)
 				}
 
-				if err := initp.cleanVolume(volume, &wg, guard, false); err != nil {
+				if err := initp.cleanBlockVolume(volume, &wg, guard, false); err != nil {
 					return dirtyVolumes, err
 				}
 
@@ -471,13 +474,15 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 	return dirtyVolumes, nil
 }
 
-func (initp *InitParams) cleanVolume(volume *Volume, wg *sync.WaitGroup, guard chan struct{},
+func (initp *InitParams) cleanBlockVolume(volume *Volume, wg *sync.WaitGroup, guard chan struct{},
 	isInitializing bool) error {
 	effectiveMethod := volume.effectiveWipeMethod
 
 	if isInitializing {
 		effectiveMethod = volume.effectiveInitMethod
 	}
+
+	initp.logger.Info(fmt.Sprintf("Cleaning block volume=%s method=%s", volume.volumeName, effectiveMethod))
 
 	switch effectiveMethod {
 	case string(asdbv1.AerospikeVolumeMethodDD):
