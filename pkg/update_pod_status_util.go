@@ -181,15 +181,17 @@ func newVolume(podName string, vol *asdbv1.VolumeSpec) *Volume {
 
 func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan struct{}) {
 	stderr, err := os.CreateTemp("/tmp", "init-stderr")
-	if err != nil {
-		panic(err.Error())
-	}
 
 	defer func() {
 		stderr.Close()
 		os.Remove(stderr.Name())
+		<-guard
 		wg.Done()
 	}()
+
+	if err != nil {
+		panic(err.Error())
+	}
 
 	if err := execute(cmd, stderr); err != nil {
 		dat, err := os.ReadFile(stderr.Name())
@@ -203,18 +205,21 @@ func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan stru
 	}
 
 	logger.Info("Execution completed", "cmd", cmd)
-	<-guard
 }
 
-func runBlkdiscard(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan struct{}) {
-	defer wg.Done()
+func runBlkdiscard(logger logr.Logger, cmdList [][]string, wg *sync.WaitGroup, guard chan struct{}) {
+	defer func() {
+		<-guard // Ensure the guard channel is released
+		wg.Done()
+	}()
 
-	if err := execute(cmd, nil); err != nil {
-		panic(err.Error())
+	for _, cmd := range cmdList {
+		if err := execute(cmd, nil); err != nil {
+			panic(err.Error())
+		}
+
+		logger.Info("Execution completed", "cmd", cmd)
 	}
-
-	logger.Info("Execution completed", "cmd", cmd)
-	<-guard
 }
 
 func isVolInitialisationNeeded(logger logr.Logger, initializedVolumes []string, volName,
@@ -270,30 +275,8 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 
 		switch volume.volumeMode {
 		case string(corev1.PersistentVolumeBlock):
-			switch volume.effectiveInitMethod {
-			case string(asdbv1.AerospikeVolumeMethodDD):
-				dd := []string{string(asdbv1.AerospikeVolumeMethodDD), "if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M"}
-
-				wg.Add(1)
-				guard <- struct{}{}
-
-				go runDD(initp.logger, dd, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
-
-			case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-				blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
-
-				wg.Add(1)
-				guard <- struct{}{}
-
-				go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
-
-			case "none":
-				initp.logger.Info(fmt.Sprintf("Pass through for volume=%+v", *volume))
-
-			default:
-				return volumeNames, fmt.Errorf("invalid effective_init_method %s", volume.effectiveInitMethod)
+			if err := initp.cleanBlockVolume(volume, &wg, guard, true); err != nil {
+				return volumeNames, err
 			}
 
 		case string(corev1.PersistentVolumeFilesystem):
@@ -308,7 +291,7 @@ func (initp *InitParams) initVolumes(ctx context.Context, pod *corev1.Pod,
 
 				initp.logger.Info("Filepath initialised", "filepath", volume.getMountPoint())
 
-			case "none":
+			case string(asdbv1.AerospikeVolumeMethodNone):
 				initp.logger.Info(fmt.Sprintf("Pass through for volume=%+v", *volume))
 
 			default:
@@ -400,33 +383,16 @@ func (initp *InitParams) cleanDirtyVolumes(dirtyVolumes, nsDevicePaths []string)
 			continue
 		}
 
+		initp.logger.Info(fmt.Sprintf("Cleaning dirty volume=%s", vol.Name))
+
 		volume := newVolume(initp.podName, vol)
 		if volume.volumeMode == string(corev1.PersistentVolumeBlock) {
 			if _, err := os.Stat(volume.getMountPoint()); err != nil {
 				return dirtyVolumes, fmt.Errorf("mounting point %s does not exist %v", volume.getMountPoint(), err)
 			}
 
-			switch volume.effectiveWipeMethod {
-			case string(asdbv1.AerospikeVolumeMethodDD):
-				dd := []string{string(asdbv1.AerospikeVolumeMethodDD), "if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M"}
-
-				wg.Add(1)
-				guard <- struct{}{}
-
-				go runDD(initp.logger, dd, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
-
-			case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-				blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
-
-				wg.Add(1)
-				guard <- struct{}{}
-
-				go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-				initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
-
-			default:
-				return dirtyVolumes, fmt.Errorf("invalid effective_wipe_method %s", volume.effectiveWipeMethod)
+			if err := initp.cleanBlockVolume(volume, &wg, guard, false); err != nil {
+				return dirtyVolumes, err
 			}
 
 			dirtyVolumes = remove(dirtyVolumes, volume.volumeName)
@@ -463,28 +429,8 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 					return dirtyVolumes, fmt.Errorf("mounting point %s does not exist %v", volume.getMountPoint(), err)
 				}
 
-				switch volume.effectiveWipeMethod {
-				case string(asdbv1.AerospikeVolumeMethodDD):
-					dd := []string{string(asdbv1.AerospikeVolumeMethodDD),
-						"if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M"}
-
-					wg.Add(1)
-					guard <- struct{}{}
-
-					go runDD(initp.logger, dd, &wg, guard)
-					initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
-
-				case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
-					blkdiscard := []string{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}
-
-					wg.Add(1)
-					guard <- struct{}{}
-
-					go runBlkdiscard(initp.logger, blkdiscard, &wg, guard)
-					initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
-
-				default:
-					return dirtyVolumes, fmt.Errorf("invalid effective_init_method %s", volume.effectiveInitMethod)
+				if err := initp.cleanBlockVolume(volume, &wg, guard, false); err != nil {
+					return dirtyVolumes, err
 				}
 
 				dirtyVolumes = remove(dirtyVolumes, volume.volumeName)
@@ -526,6 +472,62 @@ func (initp *InitParams) wipeVolumes(dirtyVolumes, nsDevicePaths, nsFilePaths []
 	initp.logger.Info("All wipe jobs finished successfully")
 
 	return dirtyVolumes, nil
+}
+
+func (initp *InitParams) cleanBlockVolume(volume *Volume, wg *sync.WaitGroup, guard chan struct{},
+	isInitializing bool) error {
+	effectiveMethod := volume.effectiveWipeMethod
+
+	if isInitializing {
+		effectiveMethod = volume.effectiveInitMethod
+	}
+
+	initp.logger.Info(fmt.Sprintf("Cleaning block volume=%s method=%s", volume.volumeName, effectiveMethod))
+
+	switch effectiveMethod {
+	case string(asdbv1.AerospikeVolumeMethodDD):
+		dd := []string{string(asdbv1.AerospikeVolumeMethodDD),
+			"if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M"}
+
+		wg.Add(1)
+		guard <- struct{}{}
+
+		go runDD(initp.logger, dd, wg, guard)
+		initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
+
+	case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
+		blkdiscard := [][]string{{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}}
+
+		wg.Add(1)
+		guard <- struct{}{}
+
+		go runBlkdiscard(initp.logger, blkdiscard, wg, guard)
+		initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
+
+	case string(asdbv1.AerospikeVolumeMethodBlkdiscardWithHeaderCleanup):
+		blkdiscardCmds := [][]string{
+			{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()},
+			{string(asdbv1.AerospikeVolumeMethodBlkdiscard), "-z", "--length", "8MiB", volume.getMountPoint()},
+		}
+
+		wg.Add(1)
+		guard <- struct{}{}
+
+		go runBlkdiscard(initp.logger, blkdiscardCmds, wg, guard)
+		initp.logger.Info(fmt.Sprintf("Commands submitted %v for volume=%+v", blkdiscardCmds, *volume))
+
+	case string(asdbv1.AerospikeVolumeMethodNone):
+		if isInitializing {
+			initp.logger.Info(fmt.Sprintf("Pass through for volume=%+v", *volume))
+		} else {
+			return fmt.Errorf("invalid effective_wipe_method %s", volume.effectiveWipeMethod)
+		}
+
+	default:
+		return fmt.Errorf("invalid effective method %s", effectiveMethod)
+	}
+
+	return nil
 }
 
 func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, restartType string) error {
