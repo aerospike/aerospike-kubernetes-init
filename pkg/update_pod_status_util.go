@@ -21,8 +21,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
-	"github.com/aerospike/aerospike-kubernetes-operator/pkg/utils"
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
+	"github.com/aerospike/aerospike-kubernetes-operator/v4/pkg/utils"
 )
 
 const (
@@ -601,6 +601,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
+	metadata.DynamicRackIDEnabled = initp.aeroCluster.Spec.RackConfig.EnableDynamicRackID
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {

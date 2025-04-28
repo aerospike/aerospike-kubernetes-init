@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	tlsAlternateAccess    = "tls-alternate-access"
 )
 
-func (initp *InitParams) createAerospikeConf() error {
+func (initp *InitParams) createAerospikeConf(isPodRestart bool) error {
 	data, err := os.ReadFile(aerospikeTemplateConf)
 	if err != nil {
 		return err
@@ -29,7 +29,18 @@ func (initp *InitParams) createAerospikeConf() error {
 
 	confString := string(data)
 
-	// Update node ids in configuration file
+	// Update node and rack ids configuration file
+	if asdbv1.GetBool(initp.aeroCluster.Spec.RackConfig.EnableDynamicRackID) {
+		rackID, err := initp.getRackIDFromVolume(initp.aeroCluster.Spec.RackConfig.RackIDVolumeName, isPodRestart)
+		if err != nil {
+			return err
+		}
+		re := regexp.MustCompile("rack-id.*0")
+		if rackStr := re.FindString(confString); rackStr != "" {
+			confString = strings.ReplaceAll(confString, rackStr, "rack-id    "+strconv.Itoa(rackID))
+		}
+	}
+
 	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
 
 	if initp.networkInfo.podPort != 0 {

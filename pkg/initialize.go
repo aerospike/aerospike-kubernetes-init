@@ -56,7 +56,7 @@ func (initp *InitParams) ColdRestart(ctx goctx.Context) error {
 	initp.logger.Info("Copied all files from configmap to configmap directory",
 		"source", "/configs", "destination", configMapDir)
 
-	if err := initp.createAerospikeConf(); err != nil {
+	if err := initp.createAerospikeConf(true); err != nil {
 		return err
 	}
 

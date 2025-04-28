@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
 type globalAddressesAndPorts struct {
@@ -142,7 +142,6 @@ func getNodeIDFromPodName(podName string) (nodeID string, err error) {
 
 func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
 	res := strings.Split(podName, "-")
-
 	//  Assuming podName format stsName-rackID-index
 	rackID, err := strconv.Atoi(res[len(res)-2])
 	if err != nil {
@@ -395,4 +394,44 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	}
 
 	return networkIPs, nil
+}
+
+func (initp *InitParams) getRackIDFromVolume(volumeName string, isPodRestart bool) (int, error) {
+	var filePath string
+
+	if isPodRestart {
+		filePath = filepath.Join(fileSystemMountPoint, volumeName)
+	} else {
+		filePath = asdbv1.GetAerospikePathForVolume(initp.aeroCluster.Spec.RackConfig.Racks[0].Storage.Volumes, volumeName)
+		if filePath == "" {
+			return 0, fmt.Errorf("failed to get rack ID file path for volume %s", volumeName)
+		}
+	}
+
+	// Check if file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return 0, fmt.Errorf("rack ID file not found at %s", filePath)
+	}
+
+	// Read file content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read rack ID file %s: %v", filePath, err)
+	}
+
+	// Trim whitespace and convert to string
+	rackIDStr := strings.TrimSpace(string(content))
+
+	// Parse rack ID as integer
+	rackID, err := strconv.Atoi(rackIDStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid rack ID in file %s: %s (must be a positive integer)", filePath, rackIDStr)
+	}
+
+	// Validate rack ID is positive
+	if rackID < 0 {
+		return 0, fmt.Errorf("invalid rack ID in file %s: %d (must be a positive integer)", filePath, rackID)
+	}
+
+	return rackID, nil
 }
