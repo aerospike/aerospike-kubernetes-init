@@ -30,8 +30,7 @@ func (initp *InitParams) ColdRestart(ctx goctx.Context) error {
 	filesToCopy := [2]string{"/workdir/bin/akoinit", "/configs/features.conf"}
 	for _, file := range filesToCopy {
 		if _, err := os.Stat(file); err == nil {
-			cmd := exec.Command("cp", "--dereference", file, configVolume)
-			if err := cmd.Run(); err != nil {
+			if err := copyFile(file, configVolume); err != nil {
 				return err
 			}
 		}

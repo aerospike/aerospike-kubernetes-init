@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 
+	lib "github.com/aerospike/aerospike-management-lib"
+
 	"github.com/go-logr/logr"
 	jp "gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -601,7 +603,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
-	metadata.DynamicRackIDEnabled = initp.aeroCluster.Spec.RackConfig.EnableDynamicRackID
+	metadata.RackIDSource = lib.DeepCopy(initp.aeroCluster.Spec.RackConfig.RackIDSource).(*asdbv1.RackIDSource)
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {

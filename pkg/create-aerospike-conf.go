@@ -30,11 +30,16 @@ func (initp *InitParams) createAerospikeConf(isPodRestart bool) error {
 	confString := string(data)
 
 	// Update node and rack ids configuration file
-	if asdbv1.GetBool(initp.aeroCluster.Spec.RackConfig.EnableDynamicRackID) {
-		rackID, err := initp.getRackIDFromVolume(initp.aeroCluster.Spec.RackConfig.RackIDVolumeName, isPodRestart)
-		if err != nil {
-			return err
+	if initp.aeroCluster.Spec.RackConfig.RackIDSource != nil {
+		var rackID int
+		if initp.aeroCluster.Spec.RackConfig.RackIDSource.HostPathConf != nil {
+			rackID, err = initp.getRackIDFromVolume(initp.aeroCluster.Spec.RackConfig.RackIDSource.HostPathConf, isPodRestart)
+			if err != nil {
+				return err
+			}
 		}
+		//TODO: handling annotation
+
 		re := regexp.MustCompile("rack-id.*0")
 		if rackStr := re.FindString(confString); rackStr != "" {
 			confString = strings.ReplaceAll(confString, rackStr, "rack-id    "+strconv.Itoa(rackID))

@@ -2,7 +2,6 @@ package pkg
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -23,8 +22,7 @@ func (initp *InitParams) copyTemplates(source, destination string) error {
 	for _, file := range filesToCopy {
 		path := filepath.Join(source, file)
 
-		cmd := exec.Command("cp", "--dereference", path, destination)
-		if err := cmd.Run(); err != nil {
+		if err := copyFile(path, destination); err != nil {
 			return err
 		}
 	}

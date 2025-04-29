@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -396,42 +397,56 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	return networkIPs, nil
 }
 
-func (initp *InitParams) getRackIDFromVolume(volumeName string, isPodRestart bool) (int, error) {
+func (initp *InitParams) getRackIDFromVolume(hostPathConf *asdbv1.HostPathConf, isPodRestart bool) (int, error) {
 	var filePath string
 
 	if isPodRestart {
-		filePath = filepath.Join(fileSystemMountPoint, volumeName)
+		filePath = filepath.Join(fileSystemMountPoint, hostPathConf.HostPathVolumeName, hostPathConf.FilePath)
 	} else {
-		filePath = asdbv1.GetAerospikePathForVolume(initp.aeroCluster.Spec.RackConfig.Racks[0].Storage.Volumes, volumeName)
-		if filePath == "" {
-			return 0, fmt.Errorf("failed to get rack ID file path for volume %s", volumeName)
+		filePath = filepath.Join(configVolume, filepath.Base(hostPathConf.FilePath))
+	}
+
+	rackID, err := readRackID(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("error retrieving rack ID from %s: %v", filePath, err)
+	}
+
+	// If pod is restarting, copy the file to configVolume
+	if isPodRestart {
+		if err := copyFile(filePath, configVolume); err != nil {
+			return 0, fmt.Errorf("failed to copy rack ID file to %s: %v", configVolume, err)
 		}
 	}
 
-	// Check if file exists
+	return rackID, nil
+}
+
+// readRackID reads and parses the rack ID from a file.
+func readRackID(filePath string) (int, error) {
+	// Ensure the file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return 0, fmt.Errorf("rack ID file not found at %s", filePath)
+		return 0, fmt.Errorf("rack ID file not found")
 	}
 
 	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read rack ID file %s: %v", filePath, err)
+		return 0, fmt.Errorf("failed to read rack ID file: %v", err)
 	}
 
-	// Trim whitespace and convert to string
+	// Trim and parse the content
 	rackIDStr := strings.TrimSpace(string(content))
-
-	// Parse rack ID as integer
 	rackID, err := strconv.Atoi(rackIDStr)
-	if err != nil {
-		return 0, fmt.Errorf("invalid rack ID in file %s: %s (must be a positive integer)", filePath, rackIDStr)
-	}
 
-	// Validate rack ID is positive
-	if rackID < 0 {
-		return 0, fmt.Errorf("invalid rack ID in file %s: %d (must be a positive integer)", filePath, rackID)
+	if err != nil || rackID < 0 {
+		return 0, fmt.Errorf("invalid rack ID: %s (must be a positive integer)", rackIDStr)
 	}
 
 	return rackID, nil
+}
+
+// copyFile copies a file to the target directory.
+func copyFile(src, destDir string) error {
+	cmd := exec.Command("cp", "--dereference", src, destDir)
+	return cmd.Run()
 }
