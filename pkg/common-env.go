@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
 var (
@@ -84,7 +84,7 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	}
 
 	workDir := asdbv1.GetWorkDirectory(rack.AerospikeConfig)
-	volume := rack.Storage.GetVolumeForAerospikePath(workDir)
+	volume := asdbv1.GetVolumeForAerospikePath(&rack.Storage, workDir)
 
 	tlsName, _ := asdbv1.GetServiceTLSNameAndPort(aeroCluster.Spec.AerospikeConfig)
 
