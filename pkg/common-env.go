@@ -84,7 +84,6 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	}
 
 	workDir := asdbv1.GetWorkDirectory(rack.AerospikeConfig)
-
 	volume := asdbv1.GetVolumeForAerospikePath(&rack.Storage, workDir)
 
 	tlsName, _ := asdbv1.GetServiceTLSNameAndPort(aeroCluster.Spec.AerospikeConfig)

@@ -1,13 +1,3 @@
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250423162301-bce61aca0226 h1:4xyuaBf6wMsSmw73x41VTerk3NuMQtzwBsHtNFLe1Lo=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250423162301-bce61aca0226/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250424064158-f8236429fa64 h1:jD6eDctgRc/T2phNrpDD1xSCej4go4N6sTvpXs60hkA=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250424064158-f8236429fa64/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250424154232-088c45dd183b h1:A+lfNIu356TBNC2zSlI0VTsgCZ6E+4t1tP+5n285eQ4=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250424154232-088c45dd183b/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250428075155-014137eb4bd9 h1:5hkB+rVPy94fAmgiZ//DdRqF0/8ZMdgztENRGdNUAnw=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250428075155-014137eb4bd9/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250428165745-e5be551b7d41 h1:RQbeJKO7/+lAOHYUDRWe+6j9c+k9WPojQOaYQ5HOItc=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250428165745-e5be551b7d41/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
 github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250429072138-767f7a28fbe1 h1:FfpVPEFTIQ4zoyUmsdaEE4g+QURueDLmNP96cieWW2E=
 github.com/aerospike/aerospike-kubernetes-operator/v4 v4.0.0-20250429072138-767f7a28fbe1/go.mod h1:rnmIoHJsqk5RMa5HlJWXOsRZE9zeOFS7BrMAcW4fK9I=
 github.com/aerospike/aerospike-management-lib v1.6.0 h1:+bV9bjO9APvF4EOH7+l6608B4rj2Ns8KJVQJ1qqCJsg=

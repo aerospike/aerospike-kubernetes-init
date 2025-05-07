@@ -18,15 +18,8 @@ require (
 )
 
 require (
-	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/google/pprof v0.0.0-20240711041743-f6c9dda6c6da // indirect
-	github.com/onsi/ginkgo/v2 v2.19.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
-)
-
-require (
 	// indirect
-	github.com/aerospike/aerospike-management-lib v1.6.0 // indirect
+	github.com/aerospike/aerospike-management-lib v1.6.0
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
