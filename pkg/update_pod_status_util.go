@@ -23,6 +23,7 @@ import (
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 	"github.com/aerospike/aerospike-kubernetes-operator/v4/pkg/utils"
+	lib "github.com/aerospike/aerospike-management-lib"
 )
 
 const (
@@ -601,6 +602,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
+	metadata.RackIDSource = lib.DeepCopy(initp.aeroCluster.Spec.RackConfig.RackIDSource).(*asdbv1.RackIDSource)
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {

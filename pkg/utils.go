@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -395,4 +396,65 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	}
 
 	return networkIPs, nil
+}
+
+func (initp *InitParams) getRackIDFromVolume(hostPath string, isPodRestart bool) (int, error) {
+	var filePath string
+
+	volume := asdbv1.GetVolumeForAerospikePath(&initp.rack.Storage, hostPath)
+	if volume == nil {
+		return 0, fmt.Errorf("volume not found for host path %s", hostPath)
+	}
+
+	initp.logger.Info("Found host path", "path", hostPath, "volume", volume)
+
+	if isPodRestart {
+		relPath, err := filepath.Rel(volume.Aerospike.Path, hostPath)
+		if err != nil {
+			return 0, err
+		}
+
+		filePath = filepath.Join(fileSystemMountPoint, volume.Name, relPath)
+	} else {
+		filePath = hostPath
+	}
+
+	initp.logger.Info("Reading rack ID from file", "filePath", filePath)
+
+	rackID, err := readRackID(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("error retrieving rack ID from %s: %v", filePath, err)
+	}
+
+	return rackID, nil
+}
+
+// readRackID reads and parses the rack ID from a file.
+func readRackID(filePath string) (int, error) {
+	// Ensure the file exists
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return 0, fmt.Errorf("rack ID file not found at %s", filePath)
+	}
+
+	// Read file content
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read rack ID file: %v", err)
+	}
+
+	// Trim and parse the content
+	rackIDStr := strings.TrimSpace(string(content))
+	rackID, err := strconv.Atoi(rackIDStr)
+
+	if err != nil || rackID < 0 {
+		return 0, fmt.Errorf("invalid rack ID: %s (must be a positive integer)", rackIDStr)
+	}
+
+	return rackID, nil
+}
+
+// copyFile copies a file to the target directory.
+func copyFile(src, destDir string) error {
+	cmd := exec.Command("cp", "--dereference", src, destDir)
+	return cmd.Run()
 }
