@@ -446,7 +446,7 @@ func readRackID(filePath string) (int, error) {
 	rackIDStr := strings.TrimSpace(string(content))
 	rackID, err := strconv.Atoi(rackIDStr)
 
-	if err != nil || rackID < 0 {
+	if err != nil || rackID <= 0 {
 		return 0, fmt.Errorf("invalid rack ID: %s (must be a positive integer)", rackIDStr)
 	}
 
