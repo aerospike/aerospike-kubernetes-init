@@ -398,32 +398,32 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	return networkIPs, nil
 }
 
-func (initp *InitParams) getRackIDFromVolume(hostPath string, isPodRestart bool) (int, error) {
-	var filePath string
+func (initp *InitParams) getRackIDFromVolume(filePath string, isPodRestart bool) (int, error) {
+	var rackIDFilePath string
 
-	volume := asdbv1.GetVolumeForAerospikePath(&initp.rack.Storage, hostPath)
+	volume := asdbv1.GetVolumeForAerospikePath(&initp.rack.Storage, filePath)
 	if volume == nil {
-		return 0, fmt.Errorf("volume not found for host path %s", hostPath)
+		return 0, fmt.Errorf("volume not found for host path %s", filePath)
 	}
 
-	initp.logger.Info("Found host path", "path", hostPath, "volume", volume)
+	initp.logger.Info("Found host path", "path", filePath, "volume", volume)
 
 	if isPodRestart {
-		relPath, err := filepath.Rel(volume.Aerospike.Path, hostPath)
+		relPath, err := filepath.Rel(volume.Aerospike.Path, filePath)
 		if err != nil {
 			return 0, err
 		}
 
-		filePath = filepath.Join(fileSystemMountPoint, volume.Name, relPath)
+		rackIDFilePath = filepath.Join(fileSystemMountPoint, volume.Name, relPath)
 	} else {
-		filePath = hostPath
+		rackIDFilePath = filePath
 	}
 
-	initp.logger.Info("Reading rack ID from file", "filePath", filePath)
+	initp.logger.Info("Reading rack ID from file", "rackIDFilePath", rackIDFilePath)
 
-	rackID, err := readRackID(filePath)
+	rackID, err := readRackID(rackIDFilePath)
 	if err != nil {
-		return 0, fmt.Errorf("error retrieving rack ID from %s: %v", filePath, err)
+		return 0, fmt.Errorf("error retrieving rack ID from %s: %v", rackIDFilePath, err)
 	}
 
 	return rackID, nil
@@ -431,14 +431,13 @@ func (initp *InitParams) getRackIDFromVolume(hostPath string, isPodRestart bool)
 
 // readRackID reads and parses the rack ID from a file.
 func readRackID(filePath string) (int, error) {
-	// Ensure the file exists
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		return 0, fmt.Errorf("rack ID file not found at %s", filePath)
-	}
-
-	// Read file content
 	content, err := os.ReadFile(filePath)
 	if err != nil {
+		// Ensure the file exists
+		if os.IsNotExist(err) {
+			return 0, fmt.Errorf("rack ID file not found at %s", filePath)
+		}
+
 		return 0, fmt.Errorf("failed to read rack ID file: %v", err)
 	}
 

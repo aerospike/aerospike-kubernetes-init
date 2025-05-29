@@ -23,7 +23,6 @@ import (
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 	"github.com/aerospike/aerospike-kubernetes-operator/v4/pkg/utils"
-	lib "github.com/aerospike/aerospike-management-lib"
 )
 
 const (
@@ -602,7 +601,6 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
-	metadata.RackIDSource = lib.DeepCopy(initp.aeroCluster.Spec.RackConfig.RackIDSource).(*asdbv1.RackIDSource)
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {
@@ -654,6 +652,15 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 	}
 
 	metadata.NetworkPolicyHash = string(networkPolicyHashBytes)
+
+	rackIDSourceHashBytes, err := os.ReadFile(filepath.Join(configMapDir, "rackIDSourceHash"))
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to read rackIDSourceHash file %v", err)
+		}
+	} else {
+		metadata.RackIDSourceHash = string(rackIDSourceHashBytes)
+	}
 
 	podSpecHashBytes, err := os.ReadFile(filepath.Join(configMapDir, "podSpecHash"))
 	if err != nil {
