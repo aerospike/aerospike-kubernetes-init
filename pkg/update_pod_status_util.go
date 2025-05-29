@@ -653,6 +653,15 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 
 	metadata.NetworkPolicyHash = string(networkPolicyHashBytes)
 
+	rackIDSourceHashBytes, err := os.ReadFile(filepath.Join(configMapDir, "rackIDSourceHash"))
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("failed to read rackIDSourceHash file %v", err)
+		}
+	} else {
+		metadata.RackIDSourceHash = string(rackIDSourceHashBytes)
+	}
+
 	podSpecHashBytes, err := os.ReadFile(filepath.Join(configMapDir, "podSpecHash"))
 	if err != nil {
 		return fmt.Errorf("failed to read podSpecHash file %v", err)

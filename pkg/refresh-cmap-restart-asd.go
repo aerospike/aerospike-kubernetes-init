@@ -45,7 +45,7 @@ func (initp *InitParams) UpdateConf(ctx goctx.Context, cmName, cmNamespace strin
 		return err
 	}
 
-	if err := initp.createAerospikeConf(); err != nil {
+	if err := initp.createAerospikeConf(false); err != nil {
 		return err
 	}
 
