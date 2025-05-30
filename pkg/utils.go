@@ -96,27 +96,27 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 	asConfig := initp.aeroCluster.Spec.AerospikeConfig
 
 	if _, serviceTLSPort := asdbv1.GetServiceTLSNameAndPort(asConfig); serviceTLSPort != nil {
-		initp.networkInfo.podTLSPort = int32(*serviceTLSPort)
+		initp.networkInfo.podTLSPort = *serviceTLSPort
 	}
 
 	if servicePort := asdbv1.GetServicePort(asConfig); servicePort != nil {
-		initp.networkInfo.podPort = int32(*servicePort)
+		initp.networkInfo.podPort = *servicePort
 	}
 
 	if _, hbTLSPort := asdbv1.GetHeartbeatTLSNameAndPort(asConfig); hbTLSPort != nil {
-		initp.networkInfo.heartBeatTLSPort = int32(*hbTLSPort)
+		initp.networkInfo.heartBeatTLSPort = *hbTLSPort
 	}
 
 	if hbPort := asdbv1.GetHeartbeatPort(asConfig); hbPort != nil {
-		initp.networkInfo.heartBeatPort = int32(*hbPort)
+		initp.networkInfo.heartBeatPort = *hbPort
 	}
 
 	if _, fabricTLSPort := asdbv1.GetFabricTLSNameAndPort(asConfig); fabricTLSPort != nil {
-		initp.networkInfo.fabricTLSPort = int32(*fabricTLSPort)
+		initp.networkInfo.fabricTLSPort = *fabricTLSPort
 	}
 
 	if fabricPort := asdbv1.GetFabricPort(asConfig); fabricPort != nil {
-		initp.networkInfo.fabricPort = int32(*fabricPort)
+		initp.networkInfo.fabricPort = *fabricPort
 	}
 
 	if err := initp.setIPAndPorts(ctx); err != nil {
