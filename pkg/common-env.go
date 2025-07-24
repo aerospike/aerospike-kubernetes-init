@@ -28,7 +28,6 @@ type InitParams struct {
 	namespace   string
 	nodeID      string
 	workDir     string
-	tlsName     string
 	logger      logr.Logger
 }
 
@@ -86,8 +85,6 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	workDir := asdbv1.GetWorkDirectory(rack.AerospikeConfig)
 	volume := asdbv1.GetVolumeForAerospikePath(&rack.Storage, workDir)
 
-	tlsName, _ := asdbv1.GetServiceTLSNameAndPort(aeroCluster.Spec.AerospikeConfig)
-
 	if volume != nil {
 		// Init container mounts all volumes by name. Update workdir to reflect that path.
 		// For example
@@ -109,7 +106,6 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		nodeID:      nodeID,
 		workDir:     workDir,
 		logger:      logger,
-		tlsName:     tlsName,
 	}
 
 	if err := initParams.setNetworkInfo(ctx); err != nil {

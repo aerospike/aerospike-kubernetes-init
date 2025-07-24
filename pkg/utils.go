@@ -39,6 +39,7 @@ type networkInfo struct {
 	externalIP                         string
 	configureAccessIP                  string
 	configuredAlterAccessIP            string
+	serviceTLSName                     string
 	customAccessNetworkIPs             []string
 	customTLSAccessNetworkIPs          []string
 	customAlternateAccessNetworkIPs    []string
@@ -50,12 +51,17 @@ type networkInfo struct {
 	fabricTLSPort                      int32
 	podPort                            int32
 	podTLSPort                         int32
-	heartBeatPort                      int32
-	heartBeatTLSPort                   int32
-	mappedPort                         int32
-	mappedTLSPort                      int32
-	multiPodPerHost                    bool
-	hostNetwork                        bool
+
+	adminPort          int32
+	adminTLSPort       int32
+	heartBeatPort      int32
+	heartBeatTLSPort   int32
+	mappedPort         int32
+	mappedTLSPort      int32
+	mappedAdminPort    int32
+	mappedAdminTLSPort int32
+	multiPodPerHost    bool
+	hostNetwork        bool
 }
 
 const (
@@ -95,12 +101,21 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 
 	asConfig := initp.aeroCluster.Spec.AerospikeConfig
 
-	if _, serviceTLSPort := asdbv1.GetServiceTLSNameAndPort(asConfig); serviceTLSPort != nil {
+	if serviceTLSName, serviceTLSPort := asdbv1.GetServiceTLSNameAndPort(asConfig); serviceTLSPort != nil {
 		initp.networkInfo.podTLSPort = *serviceTLSPort
+		initp.networkInfo.serviceTLSName = serviceTLSName
 	}
 
 	if servicePort := asdbv1.GetServicePort(asConfig); servicePort != nil {
 		initp.networkInfo.podPort = *servicePort
+	}
+
+	if _, adminTLSPort := asdbv1.GetAdminTLSNameAndPort(asConfig); adminTLSPort != nil {
+		initp.networkInfo.adminTLSPort = *adminTLSPort
+	}
+
+	if adminPort := asdbv1.GetAdminPort(asConfig); adminPort != nil {
+		initp.networkInfo.adminPort = *adminPort
 	}
 
 	if _, hbTLSPort := asdbv1.GetHeartbeatTLSNameAndPort(asConfig); hbTLSPort != nil {
@@ -190,7 +205,7 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 	// Sets up port related variables.
 	// User service ports only when MultiPodPerHost is true and node network is defined in NetworkPolicy
 	if asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) && initp.isNodeNetwork() {
-		if netInfo.mappedPort, netInfo.mappedTLSPort, err = getPorts(
+		if netInfo.mappedPort, netInfo.mappedTLSPort, netInfo.mappedAdminPort, netInfo.mappedAdminTLSPort, err = getPorts(
 			ctx, initp.k8sClient, initp.aeroCluster.Namespace, initp.podName); err != nil {
 			return err
 		}
@@ -198,6 +213,8 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 		// Use the actual ports.
 		netInfo.mappedPort = netInfo.podPort
 		netInfo.mappedTLSPort = netInfo.podTLSPort
+		netInfo.mappedAdminPort = netInfo.adminPort
+		netInfo.mappedAdminTLSPort = netInfo.adminTLSPort
 	}
 
 	if initp.isNodeNetwork() {
@@ -257,13 +274,13 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 
 // Get tls, info port
 func getPorts(ctx context.Context, k8sClient client.Client, namespace,
-	podName string) (infoPort, tlsPort int32, err error) {
+	podName string) (infoPort, tlsPort, adminPort, tlsAdminPort int32, err error) {
 	serviceList := &corev1.ServiceList{}
 	listOps := &client.ListOptions{Namespace: namespace}
 
 	err = k8sClient.List(ctx, serviceList, listOps)
 	if err != nil {
-		return infoPort, tlsPort, err
+		return infoPort, tlsPort, adminPort, tlsAdminPort, err
 	}
 
 	for idx := range serviceList.Items {
@@ -275,6 +292,10 @@ func getPorts(ctx context.Context, k8sClient client.Client, namespace,
 					infoPort = port.NodePort
 				case "tls-service":
 					tlsPort = port.NodePort
+				case "admin":
+					adminPort = port.NodePort
+				case "tls-admin":
+					tlsAdminPort = port.NodePort
 				}
 			}
 
@@ -282,7 +303,7 @@ func getPorts(ctx context.Context, k8sClient client.Client, namespace,
 		}
 	}
 
-	return infoPort, tlsPort, err
+	return infoPort, tlsPort, adminPort, tlsAdminPort, err
 }
 
 func (initp *InitParams) isNodeNetwork() bool {

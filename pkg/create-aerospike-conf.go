@@ -41,7 +41,7 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
 	}
 
-	if initp.tlsName != "" {
+	if initp.networkInfo.podTLSPort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customTLSAccessNetworkIPs, confString)
@@ -50,14 +50,16 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customTLSAlternateAccessNetworkIPs, confString)
 	}
 
-	if initp.networkInfo.networkPolicy.FabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
+	if initp.networkInfo.fabricPort != 0 &&
+		initp.networkInfo.networkPolicy.FabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
 		for _, ip := range initp.networkInfo.customFabricNetworkIPs {
 			confString = strings.ReplaceAll(confString, "fabric {",
 				fmt.Sprintf("fabric {\n        address %s", ip))
 		}
 	}
 
-	if initp.networkInfo.networkPolicy.TLSFabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
+	if initp.networkInfo.fabricTLSPort != 0 &&
+		initp.networkInfo.networkPolicy.TLSFabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
 		for _, ip := range initp.networkInfo.customTLSFabricNetworkIPs {
 			confString = strings.ReplaceAll(confString, "fabric {",
 				fmt.Sprintf("fabric {\n        tls-address %s", ip))
