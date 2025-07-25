@@ -106,11 +106,11 @@ func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName
 }
 
 func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
-	podPort := initp.networkInfo.podPort
+	podPort := initp.networkInfo.servicePort
 	adminPort := initp.networkInfo.adminPort
 
-	if initp.networkInfo.podTLSPort != 0 {
-		podPort = initp.networkInfo.podTLSPort
+	if initp.networkInfo.serviceTLSPort != 0 {
+		podPort = initp.networkInfo.serviceTLSPort
 	}
 
 	if initp.networkInfo.adminTLSPort != 0 {
@@ -131,9 +131,9 @@ func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
 	}
 
 	if initp.isNodeNetwork() {
-		metadata.ServicePort = initp.networkInfo.mappedPort
-		if initp.networkInfo.podTLSPort != 0 {
-			metadata.ServicePort = initp.networkInfo.mappedTLSPort
+		metadata.ServicePort = initp.networkInfo.mappedServicePort
+		if initp.networkInfo.serviceTLSPort != 0 {
+			metadata.ServicePort = initp.networkInfo.mappedServiceTLSPort
 		}
 
 		metadata.ServiceAdminPort = initp.networkInfo.mappedAdminPort

@@ -32,7 +32,7 @@ func (initp *InitParams) createAerospikeConf() error {
 	// Update node ids in configuration file
 	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
 
-	if initp.networkInfo.podPort != 0 {
+	if initp.networkInfo.servicePort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.AccessType, access, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customAccessNetworkIPs, confString)
@@ -41,7 +41,7 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
 	}
 
-	if initp.networkInfo.podTLSPort != 0 {
+	if initp.networkInfo.serviceTLSPort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customTLSAccessNetworkIPs, confString)
@@ -146,12 +146,12 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		accessPort    int32
 	)
 
-	podPort := initp.networkInfo.podPort
-	mappedPort := initp.networkInfo.mappedPort
+	podPort := initp.networkInfo.servicePort
+	mappedPort := initp.networkInfo.mappedServicePort
 
 	if addressType == tlsAccess || addressType == tlsAlternateAccess {
-		podPort = initp.networkInfo.podTLSPort
-		mappedPort = initp.networkInfo.mappedTLSPort
+		podPort = initp.networkInfo.serviceTLSPort
+		mappedPort = initp.networkInfo.mappedServiceTLSPort
 	}
 
 	//nolint:exhaustive // fallback to default
