@@ -79,9 +79,6 @@ jobs:
           args: --file=Dockerfile --severity-threshold=high --fail-on=all
           json: true
 
-      - name: Convert Snyk JSON to SARIF
-        uses: garethr/snyk-to-sarif@master
-
       - name: Upload result to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
