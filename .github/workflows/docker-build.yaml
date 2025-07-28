@@ -75,6 +75,7 @@ jobs:
         with:
           image: ${{ env.IMG_BASE }}:${{ env.TAG }}
           args: --file=Dockerfile --severity-threshold=high --fail-on=all # fail on vulnerabilities with fix available
+          sarif-category: snyk-docker-scan
 
       - name: Upload result to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
