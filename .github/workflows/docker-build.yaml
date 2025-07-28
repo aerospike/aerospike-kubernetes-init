@@ -69,19 +69,14 @@ jobs:
         run: ./scripts/build.sh
 
       - name: Run Snyk image security scan
-        uses: snyk/actions/docker@v3
+        uses: snyk/actions/docker@@cdb760004ba9ea4d525f2e043745dfe85bb9077e
         continue-on-error: true
         id: docker-image-scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           image: ${{ env.IMG_BASE }}:${{ env.TAG }}
-          args: --file=Dockerfile --severity-threshold=high --fail-on=all # fail on vulnerabilities with fix available
-          json: true
-
-      - name: Convert Snyk JSON to SARIF
-        uses: garethr/snyk-to-sarif@master
-
+          args: --file=Dockerfile --severity-threshold=high --fail-on=all --sarif-file-output=snyk.sarif --sarif-category=snyk-docker-image-scan
       - name: Upload result to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
