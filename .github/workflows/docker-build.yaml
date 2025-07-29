@@ -82,6 +82,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
+          category: docker-security-scan-${{ github.run_id }}
 
       - name: Check docker image scan status
         if: ${{ steps.docker-image-scan.outcome == 'failure' }}
