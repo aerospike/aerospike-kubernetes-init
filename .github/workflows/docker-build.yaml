@@ -88,12 +88,16 @@ jobs:
         run: node ./snyk-category-generator.js snyk-editable.sarif
       - name: Replace original SARIF file
         run: mv snyk-editable.sarif snyk.sarif
+      - name: Print snyk.sarif contents
+        run: |
+          echo "snyk.sarif contents:"
+          cat snyk.sarif
         
       - name: Upload result to GitHub Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: snyk.sarif
-          category: docker-security-scan-${{ github.run_id }}
+#          category: docker-security-scan-${{ github.run_id }}
 
       - name: Check docker image scan status
         if: ${{ steps.docker-image-scan.outcome == 'failure' }}
