@@ -32,7 +32,7 @@ func (initp *InitParams) createAerospikeConf() error {
 	// Update node ids in configuration file
 	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
 
-	if initp.networkInfo.podPort != 0 {
+	if initp.networkInfo.servicePort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.AccessType, access, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customAccessNetworkIPs, confString)
@@ -41,7 +41,7 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
 	}
 
-	if initp.tlsName != "" {
+	if initp.networkInfo.serviceTLSPort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
 			initp.networkInfo.customTLSAccessNetworkIPs, confString)
@@ -50,14 +50,16 @@ func (initp *InitParams) createAerospikeConf() error {
 			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customTLSAlternateAccessNetworkIPs, confString)
 	}
 
-	if initp.networkInfo.networkPolicy.FabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
+	if initp.networkInfo.fabricPort != 0 &&
+		initp.networkInfo.networkPolicy.FabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
 		for _, ip := range initp.networkInfo.customFabricNetworkIPs {
 			confString = strings.ReplaceAll(confString, "fabric {",
 				fmt.Sprintf("fabric {\n        address %s", ip))
 		}
 	}
 
-	if initp.networkInfo.networkPolicy.TLSFabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
+	if initp.networkInfo.fabricTLSPort != 0 &&
+		initp.networkInfo.networkPolicy.TLSFabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
 		for _, ip := range initp.networkInfo.customTLSFabricNetworkIPs {
 			confString = strings.ReplaceAll(confString, "fabric {",
 				fmt.Sprintf("fabric {\n        tls-address %s", ip))
@@ -144,27 +146,27 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		accessPort    int32
 	)
 
-	podPort := initp.networkInfo.podPort
-	mappedPort := initp.networkInfo.mappedPort
+	servicePort := initp.networkInfo.servicePort
+	mappedServicePort := initp.networkInfo.mappedServicePort
 
 	if addressType == tlsAccess || addressType == tlsAlternateAccess {
-		podPort = initp.networkInfo.podTLSPort
-		mappedPort = initp.networkInfo.mappedTLSPort
+		servicePort = initp.networkInfo.serviceTLSPort
+		mappedServicePort = initp.networkInfo.mappedServiceTLSPort
 	}
 
 	//nolint:exhaustive // fallback to default
 	switch networkType {
 	case asdbv1.AerospikeNetworkTypePod:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
-		accessPort = podPort
+		accessPort = servicePort
 
 	case asdbv1.AerospikeNetworkTypeHostInternal:
 		accessAddress = append(accessAddress, initp.networkInfo.internalIP)
-		accessPort = mappedPort
+		accessPort = mappedServicePort
 
 	case asdbv1.AerospikeNetworkTypeHostExternal:
 		accessAddress = append(accessAddress, initp.networkInfo.externalIP)
-		accessPort = mappedPort
+		accessPort = mappedServicePort
 
 	case asdbv1.AerospikeNetworkTypeConfigured:
 		if configuredIP == "" {
@@ -175,15 +177,15 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		}
 
 		accessAddress = append(accessAddress, configuredIP)
-		accessPort = mappedPort
+		accessPort = mappedServicePort
 
 	case asdbv1.AerospikeNetworkTypeCustomInterface:
 		accessAddress = interfaceIPs
-		accessPort = podPort
+		accessPort = servicePort
 
 	default:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
-		accessPort = podPort
+		accessPort = servicePort
 	}
 
 	// Store computed address to update the status later.
@@ -215,12 +217,12 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 	confString = strings.ReplaceAll(confString, fmt.Sprintf("%s-address    <%s-address>", addressType, addressType),
 		strings.TrimSuffix(newStr, "\n        "))
 
-	re := regexp.MustCompile(fmt.Sprintf("\\s*%s-port\\s*%d", addressType, podPort))
+	re := regexp.MustCompile(fmt.Sprintf("\\s*%s-port\\s*%d", addressType, servicePort))
 
 	if portString := re.FindString(confString); portString != "" {
 		// # This port is set in api/v1beta1/aerospikecluster_mutating_webhook.go and is used as placeholder.
 		confString = strings.ReplaceAll(confString, portString,
-			strings.ReplaceAll(portString, strconv.Itoa(int(podPort)), strconv.Itoa(int(accessPort))))
+			strings.ReplaceAll(portString, strconv.Itoa(int(servicePort)), strconv.Itoa(int(accessPort))))
 	}
 
 	return confString

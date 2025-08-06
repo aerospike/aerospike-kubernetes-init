@@ -106,28 +106,39 @@ func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName
 }
 
 func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
-	podPort := initp.networkInfo.podPort
+	servicePort := initp.networkInfo.servicePort
+	adminPort := initp.networkInfo.adminPort
 
-	if initp.tlsName != "" {
-		podPort = initp.networkInfo.podTLSPort
+	if initp.networkInfo.serviceTLSPort != 0 {
+		servicePort = initp.networkInfo.serviceTLSPort
+	}
+
+	if initp.networkInfo.adminTLSPort != 0 {
+		adminPort = initp.networkInfo.adminTLSPort
 	}
 
 	metadata := &asdbv1.AerospikePodStatus{
 		PodIP:          initp.networkInfo.podIP,
 		HostInternalIP: initp.networkInfo.internalIP,
 		HostExternalIP: initp.networkInfo.externalIP,
-		PodPort:        int(podPort),
+		PodPort:        int(servicePort),
+		PodAdminPort:   adminPort,
 		Aerospike: asdbv1.AerospikeInstanceSummary{
 			ClusterName: clusterName,
 			NodeID:      initp.nodeID,
-			TLSName:     initp.tlsName,
+			TLSName:     initp.networkInfo.serviceTLSName,
 		},
 	}
 
 	if initp.isNodeNetwork() {
-		metadata.ServicePort = initp.networkInfo.mappedPort
-		if initp.tlsName != "" {
-			metadata.ServicePort = initp.networkInfo.mappedTLSPort
+		metadata.ServicePort = initp.networkInfo.mappedServicePort
+		if initp.networkInfo.serviceTLSPort != 0 {
+			metadata.ServicePort = initp.networkInfo.mappedServiceTLSPort
+		}
+
+		metadata.ServiceAdminPort = initp.networkInfo.mappedAdminPort
+		if initp.networkInfo.adminTLSPort != 0 {
+			metadata.ServiceAdminPort = initp.networkInfo.mappedAdminTLSPort
 		}
 	}
 
