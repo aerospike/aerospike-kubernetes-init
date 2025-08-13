@@ -1,7 +1,7 @@
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.1.1-0.20250915054805-4240c6bbc7e8 h1:nD+ccFI1dA7jTuCEfVBaZc+AK+aqk8MKB69N0DIHuNU=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.1.1-0.20250915054805-4240c6bbc7e8/go.mod h1:AcR7nwSEWZpcRg+NzuFgcW4Meh7vIPObiJ+kZ6MmeEg=
-github.com/aerospike/aerospike-management-lib v1.8.0 h1:oXxuXqCpMD0f8KXXOaCdIZofNUTovef/T8wAnPGUnx8=
-github.com/aerospike/aerospike-management-lib v1.8.0/go.mod h1:RNKlkSnppiaBaLEdAiCeBv68M+odPR5JR+ziO0NfaHQ=
+github.com/aerospike/aerospike-kubernetes-operator/v4 v4.1.2-0.20250917184608-a7d534400a1d h1:/ewu38LKGOhJPCzPaxwjRiB1mtQsfpKqrSP4ZeUEpWk=
+github.com/aerospike/aerospike-kubernetes-operator/v4 v4.1.2-0.20250917184608-a7d534400a1d/go.mod h1:IY1p90UrXZTg0+0PJtHJxdS56022khyG0DuHwQSZi4c=
+github.com/aerospike/aerospike-management-lib v1.8.1-0.20250829065008-0363517825bc h1:/vlU9v4xNL/e0Lpa+OXixHLqZQedvsiK385H7rMWOlk=
+github.com/aerospike/aerospike-management-lib v1.8.1-0.20250829065008-0363517825bc/go.mod h1:RNKlkSnppiaBaLEdAiCeBv68M+odPR5JR+ziO0NfaHQ=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
