@@ -6,7 +6,7 @@ ROOT_DIR=$(shell git rev-parse --show-toplevel)
 # Platforms supported
 PLATFORMS ?= linux/amd64,linux/arm64
 
-VERSION ?= 2.2.5
+VERSION ?= 2.3.0
 # Image URL to use all building/pushing aerospike-kubernetes-init image targets
 IMG ?= aerospike/aerospike-kubernetes-init-nightly:${VERSION}
 
@@ -49,7 +49,7 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-GOLANGCI_LINT_VERSION ?= v1.60.2
+GOLANGCI_LINT_VERSION ?= v1.63.4
 
 .PHONY: golanci-lint
 golanci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
