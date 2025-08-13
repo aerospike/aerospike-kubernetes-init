@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
+	"github.com/aerospike/aerospike-kubernetes-operator/v4/pkg/utils"
 )
 
 type globalAddressesAndPorts struct {
@@ -147,22 +148,41 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 }
 
 func getNodeIDFromPodName(podName string) (nodeID string, err error) {
-	parts := strings.Split(podName, "-")
-	if len(parts) < 3 {
+	rackID, rackSuffix, err := utils.GetRackIDAndSuffixFromPodName(podName)
+	if err != nil {
 		return "", fmt.Errorf("failed to get nodeID from podName %s", podName)
 	}
-	// Podname format stsname-ordinal
-	// stsname ==> clustername-rackid
-	nodeID = parts[len(parts)-2] + "a" + parts[len(parts)-1]
+
+	parts := strings.Split(podName, "-")
+
+	rackIDStr := fmt.Sprintf("%d", rackID)
+
+	nodeIDInfix := "a"
+
+	if rackSuffix != "" {
+		nodeIDInfix = fastHashAF(rackSuffix)
+	}
+
+	// nodeID: RackID + nodeIDInfix + Pod ordinal
+	nodeID = rackIDStr + nodeIDInfix + parts[len(parts)-1]
 
 	return nodeID, nil
 }
 
-func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
-	res := strings.Split(podName, "-")
+func fastHashAF(input string) string {
+	hasher := fnv.New32a()
+	hasher.Write([]byte(input))
+	sum := hasher.Sum32()
 
-	//  Assuming podName format stsName-rackID-index
-	rackID, err := strconv.Atoi(res[len(res)-2])
+	// Map to index 0-5 (for 'a' to 'f')
+	hexChars := "bcdef"
+	index := sum % uint32(len(hexChars))
+
+	return string(hexChars[index])
+}
+
+func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
+	rackID, _, err := utils.GetRackIDAndSuffixFromPodName(podName)
 	if err != nil {
 		return nil, err
 	}
