@@ -1,11 +1,13 @@
 package pkg
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,6 +20,9 @@ import (
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/api/v1"
 )
+
+// Regex pattern to match "rack-id" followed by a number
+var rackIDPattern = regexp.MustCompile(`rack-id\s+(\d+)`)
 
 type globalAddressesAndPorts struct {
 	globalAccessAddress             []string
@@ -394,4 +399,33 @@ func parseCustomNetworkIP(networkType asdbv1.AerospikeNetworkType,
 	}
 
 	return networkIPs, nil
+}
+
+func findRackIDFromAeroConfFile(filename string) (string, error) {
+	// Open the file
+	file, err := os.Open(filename)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file: %v", err)
+	}
+	defer file.Close()
+
+	// Create scanner to read line by line
+	scanner := bufio.NewScanner(file)
+
+	// Read each line
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Look for the pattern
+		matches := rackIDPattern.FindStringSubmatch(line)
+		if len(matches) > 1 {
+			return matches[1], nil
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("error reading file: %v", err)
+	}
+
+	return "", fmt.Errorf("no rack-id found in file")
 }

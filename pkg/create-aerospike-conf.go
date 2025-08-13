@@ -29,6 +29,16 @@ func (initp *InitParams) createAerospikeConf() error {
 
 	confString := string(data)
 
+	rackID, err := findRackIDFromAeroConfFile(aerospikeConf)
+	if err != nil {
+		initp.logger.Info("Failed to find rack-id in aerospike.conf, using rack-id from aerospike.template.conf",
+			"err", err.Error())
+	} else {
+		if rackStr := rackIDPattern.FindString(confString); rackStr != "" {
+			confString = strings.ReplaceAll(confString, rackStr, "rack-id    "+rackID)
+		}
+	}
+
 	// Update node ids in configuration file
 	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
 
