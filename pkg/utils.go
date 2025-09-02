@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"os"
 	"path/filepath"
@@ -147,8 +146,9 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 	return nil
 }
 
-func getNodeIDFromPodName(podName string) (nodeID string, err error) {
-	rackID, rackSuffix, err := utils.GetRackIDAndSuffixFromPodName(podName)
+func getNodeIDFromPodName(aeroCluster *asdbv1.AerospikeCluster, podName string) (nodeID string, err error) {
+	// Derive rack ID and suffix from pod name
+	rackID, rackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, podName)
 	if err != nil {
 		return "", fmt.Errorf("failed to get nodeID from podName %s", podName)
 	}
@@ -159,8 +159,11 @@ func getNodeIDFromPodName(podName string) (nodeID string, err error) {
 
 	nodeIDInfix := "a"
 
-	if rackSuffix != "" {
-		nodeIDInfix = fastHashAF(rackSuffix)
+	if rackRevision != "" {
+		nodeIDInfix, err = determineNodeIDInfix(aeroCluster, rackID, podName, rackRevision)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	// nodeID: RackID + nodeIDInfix + Pod ordinal
@@ -169,30 +172,82 @@ func getNodeIDFromPodName(podName string) (nodeID string, err error) {
 	return nodeID, nil
 }
 
-func fastHashAF(input string) string {
-	hasher := fnv.New32a()
-	hasher.Write([]byte(input))
-	sum := hasher.Sum32()
+func determineNodeIDInfix(aeroCluster *asdbv1.AerospikeCluster, rackId int, podName, rackRevision string) (string, error) {
+	const allowed = "bcedf"
 
-	// Map to index 0-5 (for 'a' to 'f')
-	hexChars := "bcdef"
-	index := sum % uint32(len(hexChars))
+	// If this pod already has a NodeID in status, reuse its infix directly
+	if podStatus, ok := aeroCluster.Status.Pods[podName]; ok {
+		return extractInfixFromNodeID(podStatus.Aerospike.NodeID, rackId), nil
+	}
 
-	return string(hexChars[index])
+	// With at most 2 revisions: reuse same-revision infix if found; otherwise avoid the other revision's infix
+	var otherRevisionInfix byte
+	var otherRevisionFound bool
+
+	for name, st := range aeroCluster.Status.Pods {
+		statusRackID, statusRackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, name)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse rack info from podName %s: %v", name, err)
+		}
+
+		if statusRackID != rackId {
+			continue
+		}
+
+		infix := extractInfixFromNodeID(st.Aerospike.NodeID, statusRackID)
+
+		if statusRackRevision == rackRevision {
+			return infix, nil
+		}
+
+		otherRevisionInfix = infix[0]
+		otherRevisionFound = true
+		break
+	}
+
+	// Pick any allowed infix except the other revision's infix
+	for i := 0; i < len(allowed); i++ {
+		if !otherRevisionFound || allowed[i] != otherRevisionInfix {
+			return string(allowed[i]), nil
+		}
+	}
+
+	// Fallback: deterministic default
+	return "b", nil
+}
+
+// extractInfixFromNodeID extracts the single-letter infix accounting for rackID length.
+func extractInfixFromNodeID(nodeID string, rackId int) string {
+	rackIDStr := fmt.Sprintf("%d", rackId)
+
+	return nodeID[len(rackIDStr) : len(rackIDStr)+1]
 }
 
 func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
-	rackID, _, err := utils.GetRackIDAndSuffixFromPodName(podName)
+	rackID, rackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, podName)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Info("Looking for rack in rackConfig", "rack-id", rackID)
+	logger.Info("Looking for rack in rackConfig", "rack-id", rackID, "rack-revision", rackRevision)
 
 	racks := aeroCluster.Spec.RackConfig.Racks
 	for idx := range racks {
 		rack := &racks[idx]
-		if rack.ID == rackID {
+		if rack.ID == rackID && rack.RackRevision == rackRevision {
+			return rack, nil
+		}
+	}
+
+	logger.Info("Rack not found in spec, checking in status", "rack-id", rackID, "rack-revision",
+		rackRevision)
+
+	// If not found in spec, check in status. This will be case when rackRevision is changed and old rack pod got
+	// restarted somehow
+	racks = aeroCluster.Status.RackConfig.Racks
+	for idx := range racks {
+		rack := &racks[idx]
+		if rack.ID == rackID && rack.RackRevision == rackRevision {
 			return rack, nil
 		}
 	}
