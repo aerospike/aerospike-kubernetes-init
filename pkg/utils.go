@@ -240,7 +240,7 @@ func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCl
 	racks := aeroCluster.Spec.RackConfig.Racks
 	for idx := range racks {
 		rack := &racks[idx]
-		if rack.ID == rackID && rack.RackRevision == rackRevision {
+		if rack.ID == rackID && rack.Revision == rackRevision {
 			return rack, nil
 		}
 	}
@@ -253,7 +253,7 @@ func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCl
 	racks = aeroCluster.Status.RackConfig.Racks
 	for idx := range racks {
 		rack := &racks[idx]
-		if rack.ID == rackID && rack.RackRevision == rackRevision {
+		if rack.ID == rackID && rack.Revision == rackRevision {
 			return rack, nil
 		}
 	}
