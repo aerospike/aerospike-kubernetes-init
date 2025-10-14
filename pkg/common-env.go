@@ -77,7 +77,7 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		return nil, err
 	}
 
-	nodeID, err := getNodeIDFromPodName(podName)
+	nodeID, err := getNodeIDFromPodName(aeroCluster, podName)
 	if err != nil {
 		return nil, err
 	}
