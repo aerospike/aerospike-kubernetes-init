@@ -188,7 +188,7 @@ func (initp *InitParams) makeWorkDir() error {
 	if initp.workDir != "" && initp.workDir != defaultWorkDirectory {
 		defaultWorkDir := filepath.Join("workdir", "filesystem-volumes", initp.workDir)
 
-		requiredDirs := [3]string{"smd", "usr/udf/lua"}
+		requiredDirs := [2]string{"smd", "usr/udf/lua"}
 		for _, d := range requiredDirs {
 			toCreate := filepath.Join(defaultWorkDir, d)
 			initp.logger.Info("Creating directory", "dir", toCreate)
