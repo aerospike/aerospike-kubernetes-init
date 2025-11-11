@@ -176,7 +176,7 @@ func determineNodeIDInfix(
 	aeroCluster *asdbv1.AerospikeCluster, rackID int, podName,
 	rackRevision string,
 ) (string, error) {
-	const allowed = "bcedf"
+	const allowed = "bcdef"
 
 	// If this pod already has a NodeID in status, reuse its infix directly
 	if podStatus, ok := aeroCluster.Status.Pods[podName]; ok {
