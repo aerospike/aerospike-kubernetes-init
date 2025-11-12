@@ -72,7 +72,7 @@ func (initp *InitParams) restartASD() error {
 	}
 
 	if !isTerminated {
-		// ASD did not terminate within stipulated time.
+		// ASD did not terminate within the stipulated time.
 		return fmt.Errorf("aborting warm start - Aerospike server did not terminate")
 	}
 
