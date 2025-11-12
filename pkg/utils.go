@@ -172,6 +172,17 @@ func getNodeIDFromPodName(aeroCluster *asdbv1.AerospikeCluster, podName string) 
 	return nodeID, nil
 }
 
+// determineNodeIDInfix returns a single-character infix used in an Aerospike NodeID.
+// Allowed infixes are the characters in the `allowed` constant: "b", "c", "d", "e", "f".
+//
+// Selection precedence:
+//  1. If the pod with the same name already exists in `aeroCluster.Status.Pods`, reuse that pod's NodeID infix.
+//  2. Otherwise, among pods in Status with the same `rackID`:
+//     a. If a pod with the same `rackRevision` exists, reuse that infix.
+//     b. If only other revision is present, avoid that revision's infix and pick any allowed infix that doesn't clash.
+//  3. If no infix can be chosen by the above rules, return a deterministic default of "b".
+//
+// The function returns the chosen single-character infix as a string, or an error if status pod name parsing fails.
 func determineNodeIDInfix(
 	aeroCluster *asdbv1.AerospikeCluster, rackID int, podName,
 	rackRevision string,
