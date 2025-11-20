@@ -18,7 +18,7 @@ func (initp *InitParams) restartASD() error {
 
 	strData := string(data)
 	// Check if we are running under tini to be able to warm restart.
-	if !(strings.Contains(strData, "tini") && strings.Contains(strData, "-r")) {
+	if !strings.Contains(strData, "tini") || !strings.Contains(strData, "-r") {
 		return fmt.Errorf("warm restart not supported - aborting")
 	}
 
