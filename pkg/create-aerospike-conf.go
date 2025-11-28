@@ -163,11 +163,13 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 		install-mac = 41:9C:38:C2:8F:59:09:43:2C:AA:2F:58:36:2D:D9:04:F9:6C:56:8B:09:E0:18:3A:2E:D6:CC:69:05:04:E1:11
 		install-status = INSTALL_SELF_TEST_KATS_RUN`
 
-	if err := os.WriteFile(aerospikeOpensslCnf, []byte(opensslCnf), 0644); err != nil { //nolint:gocritic,gosec // file permission
+	//nolint:gocritic,gosec // file permission
+	if err := os.WriteFile(aerospikeOpensslCnf, []byte(opensslCnf), 0644); err != nil {
 		return fmt.Errorf("failed to write openssl.cnf: %v", err)
 	}
 
-	if err := os.WriteFile(aerospikeFipsCnf, []byte(fipsCnf), 0644); err != nil { //nolint:gocritic,gosec // file permission
+	//nolint:gocritic,gosec // file permission
+	if err := os.WriteFile(aerospikeFipsCnf, []byte(fipsCnf), 0644); err != nil {
 		return fmt.Errorf("failed to write fips.cnf: %v", err)
 	}
 
