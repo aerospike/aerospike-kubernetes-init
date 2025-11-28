@@ -501,9 +501,11 @@ func (initp *InitParams) cleanBlockVolume(volume *Volume, wg *sync.WaitGroup, gu
 			"if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M"}
 
 		wg.Add(1)
+
 		guard <- struct{}{}
 
 		go runDD(initp.logger, dd, wg, guard)
+
 		initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", dd, *volume))
 
 	case string(asdbv1.AerospikeVolumeMethodHeaderCleanup):
@@ -511,18 +513,22 @@ func (initp *InitParams) cleanBlockVolume(volume *Volume, wg *sync.WaitGroup, gu
 			"if=/dev/zero", "of=" + volume.getMountPoint(), "bs=1M", "count=8"}
 
 		wg.Add(1)
+
 		guard <- struct{}{}
 
 		go runDD(initp.logger, ddHeader, wg, guard)
+
 		initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", ddHeader, *volume))
 
 	case string(asdbv1.AerospikeVolumeMethodBlkdiscard):
 		blkdiscard := [][]string{{string(asdbv1.AerospikeVolumeMethodBlkdiscard), volume.getMountPoint()}}
 
 		wg.Add(1)
+
 		guard <- struct{}{}
 
 		go runBlkdiscard(initp.logger, blkdiscard, wg, guard)
+
 		initp.logger.Info(fmt.Sprintf("Command submitted %v for volume=%+v", blkdiscard, *volume))
 
 	case string(asdbv1.AerospikeVolumeMethodBlkdiscardWithHeaderCleanup):
@@ -532,9 +538,11 @@ func (initp *InitParams) cleanBlockVolume(volume *Volume, wg *sync.WaitGroup, gu
 		}
 
 		wg.Add(1)
+
 		guard <- struct{}{}
 
 		go runBlkdiscard(initp.logger, blkdiscardCmds, wg, guard)
+
 		initp.logger.Info(fmt.Sprintf("Commands submitted %v for volume=%+v", blkdiscardCmds, *volume))
 
 	case string(asdbv1.AerospikeVolumeMethodNone):

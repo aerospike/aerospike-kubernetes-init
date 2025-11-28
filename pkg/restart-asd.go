@@ -18,7 +18,7 @@ func (initp *InitParams) restartASD() error {
 
 	strData := string(data)
 	// Check if we are running under tini to be able to warm restart.
-	if !(strings.Contains(strData, "tini") && strings.Contains(strData, "-r")) {
+	if !strings.Contains(strData, "tini") || !strings.Contains(strData, "-r") {
 		return fmt.Errorf("warm restart not supported - aborting")
 	}
 
@@ -72,7 +72,7 @@ func (initp *InitParams) restartASD() error {
 	}
 
 	if !isTerminated {
-		// ASD did not terminate within stipulated time.
+		// ASD did not terminate within the stipulated time.
 		return fmt.Errorf("aborting warm start - Aerospike server did not terminate")
 	}
 

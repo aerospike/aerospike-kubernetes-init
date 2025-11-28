@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -18,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
+	"github.com/aerospike/aerospike-kubernetes-operator/v4/pkg/utils"
 )
 
 type globalAddressesAndPorts struct {
@@ -146,33 +146,125 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 	return nil
 }
 
-func getNodeIDFromPodName(podName string) (nodeID string, err error) {
-	parts := strings.Split(podName, "-")
-	if len(parts) < 3 {
+func getNodeIDFromPodName(aeroCluster *asdbv1.AerospikeCluster, podName string) (nodeID string, err error) {
+	// Derive rack ID and suffix from pod name
+	rackID, rackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, podName)
+	if err != nil {
 		return "", fmt.Errorf("failed to get nodeID from podName %s", podName)
 	}
-	// Podname format stsname-ordinal
-	// stsname ==> clustername-rackid
-	nodeID = parts[len(parts)-2] + "a" + parts[len(parts)-1]
+
+	parts := strings.Split(podName, "-")
+
+	rackIDStr := fmt.Sprintf("%d", rackID)
+
+	nodeIDInfix := "a"
+
+	if rackRevision != "" {
+		nodeIDInfix, err = determineNodeIDInfix(aeroCluster, rackID, podName, rackRevision)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// nodeID: RackID + nodeIDInfix + Pod ordinal
+	nodeID = rackIDStr + nodeIDInfix + parts[len(parts)-1]
 
 	return nodeID, nil
 }
 
-func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
-	res := strings.Split(podName, "-")
+// determineNodeIDInfix returns a single-character infix used in an Aerospike NodeID.
+// Allowed infixes are the characters in the `allowed` constant: "b", "c", "d", "e", "f".
+//
+// Selection precedence:
+//  1. If the pod with the same name already exists in `aeroCluster.Status.Pods`, reuse that pod's NodeID infix.
+//  2. Otherwise, among pods in Status with the same `rackID`:
+//     a. If a pod with the same `rackRevision` exists, reuse that infix.
+//     b. If only other revision is present, avoid that revision's infix and pick any allowed infix that doesn't clash.
+//  3. If no infix can be chosen by the above rules, return a deterministic default of "b".
+//
+// The function returns the chosen single-character infix as a string, or an error if status pod name parsing fails.
+func determineNodeIDInfix(
+	aeroCluster *asdbv1.AerospikeCluster, rackID int, podName,
+	rackRevision string,
+) (string, error) {
+	const allowed = "bcdef"
 
-	//  Assuming podName format stsName-rackID-index
-	rackID, err := strconv.Atoi(res[len(res)-2])
+	// If this pod already has a NodeID in status, reuse its infix directly
+	if podStatus, ok := aeroCluster.Status.Pods[podName]; ok {
+		return extractInfixFromNodeID(podStatus.Aerospike.NodeID, rackID), nil
+	}
+
+	// With at most 2 revisions: reuse same-revision infix if found; otherwise avoid the other revision's infix
+	var (
+		otherRevisionInfix byte
+		otherRevisionFound bool
+	)
+
+	for name := range aeroCluster.Status.Pods {
+		statusRackID, statusRackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, name)
+		if err != nil {
+			return "", fmt.Errorf("failed to parse rack info from podName %s: %v", name, err)
+		}
+
+		if statusRackID != rackID {
+			continue
+		}
+
+		infix := extractInfixFromNodeID(aeroCluster.Status.Pods[name].Aerospike.NodeID, statusRackID)
+
+		if statusRackRevision == rackRevision {
+			return infix, nil
+		}
+
+		otherRevisionInfix = infix[0]
+		otherRevisionFound = true
+
+		break
+	}
+
+	// Pick any allowed infix except the other revision's infix
+	for i := 0; i < len(allowed); i++ {
+		if !otherRevisionFound || allowed[i] != otherRevisionInfix {
+			return string(allowed[i]), nil
+		}
+	}
+
+	// Fallback: deterministic default
+	return "b", nil
+}
+
+// extractInfixFromNodeID extracts the single-letter infix accounting for rackID length.
+func extractInfixFromNodeID(nodeID string, rackID int) string {
+	rackIDStr := fmt.Sprintf("%d", rackID)
+
+	return nodeID[len(rackIDStr) : len(rackIDStr)+1]
+}
+
+func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCluster) (*asdbv1.Rack, error) {
+	rackID, rackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, podName)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Info("Looking for rack in rackConfig", "rack-id", rackID)
+	logger.Info("Looking for rack in rackConfig", "rack-id", rackID, "rack-revision", rackRevision)
 
 	racks := aeroCluster.Spec.RackConfig.Racks
 	for idx := range racks {
 		rack := &racks[idx]
-		if rack.ID == rackID {
+		if rack.ID == rackID && rack.Revision == rackRevision {
+			return rack, nil
+		}
+	}
+
+	logger.Info("Rack not found in spec, checking in status", "rack-id", rackID, "rack-revision",
+		rackRevision)
+
+	// If not found in spec, check in status. This will be case when rackRevision is changed and old rack pod got
+	// restarted somehow
+	racks = aeroCluster.Status.RackConfig.Racks
+	for idx := range racks {
+		rack := &racks[idx]
+		if rack.ID == rackID && rack.Revision == rackRevision {
 			return rack, nil
 		}
 	}
@@ -188,7 +280,7 @@ func (initp *InitParams) makeWorkDir() error {
 	if initp.workDir != "" && initp.workDir != defaultWorkDirectory {
 		defaultWorkDir := filepath.Join("workdir", "filesystem-volumes", initp.workDir)
 
-		requiredDirs := [3]string{"smd", "usr/udf/lua", "xdr"}
+		requiredDirs := [2]string{"smd", "usr/udf/lua"}
 		for _, d := range requiredDirs {
 			toCreate := filepath.Join(defaultWorkDir, d)
 			initp.logger.Info("Creating directory", "dir", toCreate)

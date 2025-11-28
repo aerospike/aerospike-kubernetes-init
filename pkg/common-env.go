@@ -56,7 +56,6 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	logger.Info("Gathering all the required info from environment variables, k8s cluster and AerospikeCluster")
 
 	var err error
-
 	if k8sClient, err = client.New(
 		cfg, client.Options{Scheme: scheme},
 	); err != nil {
@@ -77,7 +76,7 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		return nil, err
 	}
 
-	nodeID, err := getNodeIDFromPodName(podName)
+	nodeID, err := getNodeIDFromPodName(aeroCluster, podName)
 	if err != nil {
 		return nil, err
 	}
