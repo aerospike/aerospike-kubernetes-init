@@ -15,6 +15,8 @@ const (
 	aerospikeTemplateConf = "/etc/aerospike/aerospike.template.conf"
 	aerospikeConf         = "/etc/aerospike/aerospike.conf"
 	peers                 = "/etc/aerospike/peers"
+	aerospikeOpensslCnf   = "/etc/aerospike/openssl.cnf"
+	aerospikeFipsCnf      = "/etc/aerospike/fips.cnf"
 	access                = "access"
 	alternateAccess       = "alternate-access"
 	tlsAccess             = "tls-access"
@@ -132,6 +134,42 @@ func (initp *InitParams) createAerospikeConf() error {
 	}
 
 	initp.logger.Info(fmt.Sprintf("Final aerospike conf file %s: \n%s", aerospikeConf, confString))
+
+	return nil
+}
+
+func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
+	const opensslCnf = `config_diagnostics = 1
+		openssl_conf = openssl_init
+
+		.include fips.cnf
+
+		[openssl_init]
+		providers = provider_sect
+
+		[provider_sect]
+		fips = fips_sect
+		base = base_sect
+
+		[base_sect]
+		activate = 1`
+
+	const fipsCnf = `[fips_sect]
+		activate = 1
+		install-version = 1
+		conditional-errors = 1
+		security-checks = 1
+		module-mac = A0:23:57:80:14:A6:CC:BD:E4:B4:E8:4E:66:0E:88:3B:AF:9E:B5:81:43:45:F6:F0:71:3B:F4:70:7E:E9:2B:92
+		install-mac = 41:9C:38:C2:8F:59:09:43:2C:AA:2F:58:36:2D:D9:04:F9:6C:56:8B:09:E0:18:3A:2E:D6:CC:69:05:04:E1:11
+		install-status = INSTALL_SELF_TEST_KATS_RUN`
+
+	if err := os.WriteFile(aerospikeOpensslCnf, []byte(opensslCnf), 0644); err != nil { //nolint:gocritic,gosec // file permission
+		return fmt.Errorf("failed to write openssl.cnf: %v", err)
+	}
+
+	if err := os.WriteFile(aerospikeFipsCnf, []byte(fipsCnf), 0644); err != nil { //nolint:gocritic,gosec // file permission
+		return fmt.Errorf("failed to write fips.cnf: %v", err)
+	}
 
 	return nil
 }

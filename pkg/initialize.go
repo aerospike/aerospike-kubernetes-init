@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -58,6 +59,12 @@ func (initp *InitParams) ColdRestart(ctx goctx.Context) error {
 
 	if err := initp.createAerospikeConf(); err != nil {
 		return err
+	}
+
+	if strings.Contains(strings.ToLower(initp.aeroCluster.Spec.Image), "federal") {
+		if err := initp.createAerospikeOpensslAndFipsCnf(); err != nil {
+			return err
+		}
 	}
 
 	return initp.manageVolumesAndUpdateStatus(ctx, "podRestart")
