@@ -6,7 +6,7 @@ ROOT_DIR=$(shell git rev-parse --show-toplevel)
 # Platforms supported
 PLATFORMS ?= linux/amd64,linux/arm64
 
-VERSION ?= 2.3.1
+VERSION ?= 2.3.2
 # Image URL to use all building/pushing aerospike-kubernetes-init image targets
 IMG ?= aerospike/aerospike-kubernetes-init-nightly:${VERSION}
 
