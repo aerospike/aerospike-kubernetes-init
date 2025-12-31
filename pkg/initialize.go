@@ -5,7 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
+
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
 const (
@@ -61,7 +62,7 @@ func (initp *InitParams) ColdRestart(ctx goctx.Context) error {
 		return err
 	}
 
-	if strings.Contains(strings.ToLower(initp.aeroCluster.Spec.Image), "federal") {
+	if asdbv1.IsFederal(initp.aeroCluster.Spec.Image) {
 		if err := initp.createAerospikeOpensslAndFipsCnf(); err != nil {
 			return err
 		}

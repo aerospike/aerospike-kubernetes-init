@@ -146,6 +146,7 @@ func (initp *InitParams) createAerospikeConf() error {
 }
 
 func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
+	initp.logger.Info("Creating openssl.cnf and fips.cnf files")
 	//nolint:gocritic,gosec // file permission
 	if err := os.WriteFile(aerospikeOpensslCnf, opensslCnf, 0644); err != nil {
 		return fmt.Errorf("failed to write openssl.cnf: %v", err)
@@ -155,6 +156,8 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 	if err := os.WriteFile(aerospikeFipsCnf, fipsCnf, 0644); err != nil {
 		return fmt.Errorf("failed to write fips.cnf: %v", err)
 	}
+
+	initp.logger.Info("Successfully created openssl.cnf and fips.cnf files")
 
 	return nil
 }
