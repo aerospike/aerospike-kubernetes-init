@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"bufio"
+	_ "embed"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,10 +12,18 @@ import (
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
+//go:embed fips-confs/openssl.cnf
+var opensslCnf []byte
+
+//go:embed fips-confs/fips.cnf
+var fipsCnf []byte
+
 const (
 	aerospikeTemplateConf = "/etc/aerospike/aerospike.template.conf"
 	aerospikeConf         = "/etc/aerospike/aerospike.conf"
 	peers                 = "/etc/aerospike/peers"
+	aerospikeOpensslCnf   = "/etc/aerospike/openssl.cnf"
+	aerospikeFipsCnf      = "/etc/aerospike/fips.cnf"
 	access                = "access"
 	alternateAccess       = "alternate-access"
 	tlsAccess             = "tls-access"
@@ -132,6 +141,23 @@ func (initp *InitParams) createAerospikeConf() error {
 	}
 
 	initp.logger.Info(fmt.Sprintf("Final aerospike conf file %s: \n%s", aerospikeConf, confString))
+
+	return nil
+}
+
+func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
+	initp.logger.Info("Creating openssl.cnf and fips.cnf files")
+	//nolint:gocritic,gosec // file permission
+	if err := os.WriteFile(aerospikeOpensslCnf, opensslCnf, 0644); err != nil {
+		return fmt.Errorf("failed to write openssl.cnf: %v", err)
+	}
+
+	//nolint:gocritic,gosec // file permission
+	if err := os.WriteFile(aerospikeFipsCnf, fipsCnf, 0644); err != nil {
+		return fmt.Errorf("failed to write fips.cnf: %v", err)
+	}
+
+	initp.logger.Info("Successfully created openssl.cnf and fips.cnf files")
 
 	return nil
 }

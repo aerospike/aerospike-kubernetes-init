@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
 
 const (
@@ -58,6 +60,12 @@ func (initp *InitParams) ColdRestart(ctx goctx.Context) error {
 
 	if err := initp.createAerospikeConf(); err != nil {
 		return err
+	}
+
+	if asdbv1.IsFederal(initp.aeroCluster.Spec.Image) {
+		if err := initp.createAerospikeOpensslAndFipsCnf(); err != nil {
+			return err
+		}
 	}
 
 	return initp.manageVolumesAndUpdateStatus(ctx, "podRestart")
