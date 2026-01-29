@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
@@ -85,7 +86,16 @@ func execute(cmd []string, stderr *os.File) error {
 func (initp *InitParams) getPodImages(pod *corev1.Pod) (serverImage, initImage string) {
 	initp.logger.Info("Get pod image", "podName", pod.Name)
 
-	return pod.Spec.Containers[0].Image, pod.Spec.InitContainers[0].Image
+	// Find init container by matching image name
+	for idx := range pod.Spec.InitContainers {
+		initContainer := pod.Spec.InitContainers[idx]
+		if strings.EqualFold(initContainer.Name, asdbv1.AerospikeInitContainerName) {
+			initImage = initContainer.Image
+			break
+		}
+	}
+
+	return pod.Spec.Containers[0].Image, initImage
 }
 
 func (initp *InitParams) getPVCUid(ctx context.Context, pod *corev1.Pod, volName string) (string, error) {
@@ -630,6 +640,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
+	metadata.DynamicRackID = ptr.Deref(initp.aeroCluster.Spec.EnableDynamicRackID, false)
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {

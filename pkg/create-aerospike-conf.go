@@ -2,12 +2,16 @@ package pkg
 
 import (
 	"bufio"
+	goctx "context"
 	_ "embed"
 	"fmt"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
 )
@@ -128,6 +132,12 @@ func (initp *InitParams) createAerospikeConf() error {
 		}
 	}
 
+	// Update namespace sections with rack-id from pod annotation
+	confString, err = initp.updateNamespaceRackID(goctx.TODO(), confString)
+	if err != nil {
+		return fmt.Errorf("failed to update namespace rack-id: %w", err)
+	}
+
 	// Remove escape sequence from LDAP configuration if any
 	confString = strings.ReplaceAll(confString, "$${_DNE}{un}", "${un}")
 	confString = strings.ReplaceAll(confString, "$${_DNE}{dn}", "${dn}")
@@ -160,6 +170,41 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 	initp.logger.Info("Successfully created openssl.cnf and fips.cnf files")
 
 	return nil
+}
+
+// updateNamespaceRackID replaces rack-id field in namespace sections
+// using the value from pod annotation "aerospike/effective-rack-id"
+// Only proceeds if EnableDynamicRackID is set to true in AerospikeCluster CR spec
+// Only replaces rack-id if it exists in the template, does not add if missing
+func (initp *InitParams) updateNamespaceRackID(ctx goctx.Context, confString string) (string, error) {
+	// Check if dynamic rack-id is enabled in AerospikeCluster CR spec
+	if !asdbv1.GetBool(initp.aeroCluster.Spec.EnableDynamicRackID) {
+		initp.logger.Info("EnableDynamicRackID not set, skipping rack-id update")
+		return confString, nil
+	}
+
+	// Get the pod to read annotations
+	pod := &corev1.Pod{}
+	if err := initp.k8sClient.Get(ctx, types.NamespacedName{
+		Name:      initp.podName,
+		Namespace: initp.namespace,
+	}, pod); err != nil {
+		return confString, fmt.Errorf("failed to get pod: %v", err)
+	}
+
+	// Get the effective-rack-id from pod annotation
+	effectiveRackID, exists := pod.Annotations[asdbv1.EffectiveRackIDAnnotation]
+	if !exists || effectiveRackID == "" {
+		return confString, fmt.Errorf("annotation 'aerospike/effective-rack-id' not found or empty")
+	}
+
+	initp.logger.Info("Updating namespace sections with rack-id", "rack-id", effectiveRackID)
+
+	// Use regex to replace all rack-id values with the annotation value
+	rackIDPattern := regexp.MustCompile(`rack-id\s+\d+`)
+	result := rackIDPattern.ReplaceAllString(confString, fmt.Sprintf("rack-id    %s", effectiveRackID))
+
+	return result, nil
 }
 
 // Update access addresses in the configuration file
