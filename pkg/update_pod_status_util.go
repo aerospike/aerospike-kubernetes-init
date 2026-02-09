@@ -640,7 +640,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.InitializedVolumes = initializedVolumes
 	metadata.DirtyVolumes = dirtyVolumes
 	metadata.DynamicConfigUpdateStatus = ""
-	metadata.DynamicRackID = ptr.Deref(initp.aeroCluster.Spec.EnableDynamicRackID, false)
+	metadata.RackIDOverridden = ptr.Deref(initp.aeroCluster.Spec.EnableRackIDOverride, false)
 
 	data, err := os.ReadFile(aerospikeConf)
 	if err != nil {
