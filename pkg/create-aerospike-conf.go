@@ -166,7 +166,7 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 }
 
 // updateNamespaceRackID replaces rack-id field in namespace sections
-// using the value from pod annotation "aerospike/override-rack-id"
+// using the value from pod annotation "aerospike.com/override-rack-id"
 // Only proceeds if EnableRackIDOverride is set to true in AerospikeCluster CR spec
 // Only replaces rack-id if it exists in the template, does not add if missing
 func (initp *InitParams) updateNamespaceRackID(confString string) string {

@@ -115,12 +115,12 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 		// Get the override-rack-id from pod annotation
 		rackID, exists := pod.Annotations[asdbv1.OverrideRackIDAnnotation]
 		if !exists || rackID == "" {
-			return nil, fmt.Errorf("annotation 'aerospike/override-rack-id' not found or empty")
+			return nil, fmt.Errorf("annotation 'aerospike.com/override-rack-id' not found or empty")
 		}
 
 		overrideRackID, err = strconv.Atoi(rackID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse 'aerospike/override-rack-id' '%s': %v", rackID, err)
+			return nil, fmt.Errorf("failed to parse 'aerospike.com/override-rack-id' '%s': %v", rackID, err)
 		}
 
 		if overrideRackID < 0 || overrideRackID > 1000000 {
