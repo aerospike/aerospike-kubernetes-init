@@ -128,6 +128,9 @@ func (initp *InitParams) createAerospikeConf() error {
 		}
 	}
 
+	// Update namespace sections with rack-id from pod annotation
+	confString = initp.updateNamespaceRackID(confString)
+
 	// Remove escape sequence from LDAP configuration if any
 	confString = strings.ReplaceAll(confString, "$${_DNE}{un}", "${un}")
 	confString = strings.ReplaceAll(confString, "$${_DNE}{dn}", "${dn}")
@@ -160,6 +163,26 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 	initp.logger.Info("Successfully created openssl.cnf and fips.cnf files")
 
 	return nil
+}
+
+// updateNamespaceRackID replaces rack-id field in namespace sections
+// using the value from pod annotation "aerospike.com/override-rack-id"
+// Only proceeds if EnableRackIDOverride is set to true in AerospikeCluster CR spec
+// Only replaces rack-id if it exists in the template, does not add if missing
+func (initp *InitParams) updateNamespaceRackID(confString string) string {
+	// Check if dynamic rack-id is enabled in AerospikeCluster CR spec
+	if !asdbv1.GetBool(initp.aeroCluster.Spec.EnableRackIDOverride) {
+		initp.logger.Info("EnableRackIDOverride not set, skipping rack-id update")
+		return confString
+	}
+
+	initp.logger.Info("Updating namespace sections with override rack-id", "rack-id", initp.overrideRackID)
+
+	// Use regex to replace all rack-id values with the annotation value
+	rackIDPattern := regexp.MustCompile(`rack-id\s+\d+`)
+	result := rackIDPattern.ReplaceAllString(confString, fmt.Sprintf("rack-id    %d", initp.overrideRackID))
+
+	return result
 }
 
 // Update access addresses in the configuration file
