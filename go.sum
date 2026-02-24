@@ -2,8 +2,8 @@ github.com/Masterminds/semver/v3 v3.4.0 h1:Zog+i5UMtVoCU8oKka5P7i9q9HgrJeGzI9SA1
 github.com/Masterminds/semver/v3 v3.4.0/go.mod h1:4V+yj/TJE1HU9XfppCwVMZq3I84lprf4nC11bSS5beM=
 github.com/aerospike/aerospike-client-go/v8 v8.6.0 h1:EFSn94Mu1Et/hTIOIE4wsUgoaY7JGOdKj0zWKugu/GU=
 github.com/aerospike/aerospike-client-go/v8 v8.6.0/go.mod h1:nT+zujQ8DC8fjRY+naK4oa3IYF8QyELW3HjNYO0zYX0=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.2.1-0.20260217163020-94ae711ec4d1 h1:GQU0Wo/4ukhTDKIB/vTgEnx27/CscORfeuWqTPthdJk=
-github.com/aerospike/aerospike-kubernetes-operator/v4 v4.2.1-0.20260217163020-94ae711ec4d1/go.mod h1:mBW9JtrIV6t5dQfBZc0GmcD6Y3t/uxJHqASA6FUPYcU=
+github.com/aerospike/aerospike-kubernetes-operator/v4 v4.3.0 h1:jfa2c3g6SonRiJW4OMKfc3liISdk7WDskibn7GuVD8A=
+github.com/aerospike/aerospike-kubernetes-operator/v4 v4.3.0/go.mod h1:mBW9JtrIV6t5dQfBZc0GmcD6Y3t/uxJHqASA6FUPYcU=
 github.com/aerospike/aerospike-management-lib v1.10.0 h1:FEjLL1KnYQD0/EIMKtAl3x86mQG8mXtrQDAQi84L1fQ=
 github.com/aerospike/aerospike-management-lib v1.10.0/go.mod h1:vp1gxtJikA1Q2Sjo82SsoYoRzQiz6MipQDNQSg34f+s=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
