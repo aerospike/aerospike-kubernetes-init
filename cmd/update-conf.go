@@ -35,6 +35,7 @@ var confUpdate = &cobra.Command{
 		if err != nil {
 			return err
 		}
+
 		return initParams.UpdateConf(ctx, cmName, cmNamespace)
 	},
 }
