@@ -41,6 +41,7 @@ restart asd process in server and updating CR status.`,
 		if err != nil {
 			return err
 		}
+
 		return initParams.QuickRestart(ctx, cmName, cmNamespace)
 	},
 }

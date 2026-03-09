@@ -205,6 +205,7 @@ func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan stru
 
 	defer func() {
 		stderr.Close()
+		// #nosec G703 -- path from os.CreateTemp is safe
 		os.Remove(stderr.Name())
 		<-guard
 		wg.Done()
@@ -215,6 +216,7 @@ func runDD(logger logr.Logger, cmd []string, wg *sync.WaitGroup, guard chan stru
 	}
 
 	if err := execute(cmd, stderr); err != nil {
+		// #nosec G703 -- path from os.CreateTemp is safe
 		dat, err := os.ReadFile(stderr.Name())
 		if err != nil {
 			panic(err.Error())
@@ -667,6 +669,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 		}
 
 		initp.logger.Info("Patched/updated pod annotation successfully", "podname", initp.podName)
+
 		return nil
 	}); err != nil {
 		return err
@@ -705,8 +708,7 @@ func (initp *InitParams) updateStatus(ctx context.Context,
 	metadata.Aerospike.TLSAccessEndpoints = initp.getEndpoints(tlsAccess)
 	metadata.Aerospike.TLSAlternateAccessEndpoints = initp.getEndpoints(tlsAlternateAccess)
 
-	var patches []jp.JsonPatchOperation
-
+	patches := make([]jp.JsonPatchOperation, 0, 1)
 	patch := jp.JsonPatchOperation{
 		Operation: "replace",
 		Path:      "/status/pods/" + initp.podName,

@@ -49,7 +49,7 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.6.1
+GOLANGCI_LINT_VERSION ?= v2.10.1
 
 .PHONY: golanci-lint
 golanci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.

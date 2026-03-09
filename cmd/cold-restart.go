@@ -36,6 +36,7 @@ during pod start and subsequent cold restarts.`,
 		if err != nil {
 			return err
 		}
+
 		return initParams.ColdRestart(ctx)
 	},
 }
