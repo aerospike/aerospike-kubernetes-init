@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/mitchellh/go-ps v1.0.0
-	github.com/spf13/cobra v1.10.1
+	github.com/spf13/cobra v1.10.2
 	gomodules.xyz/jsonpatch/v2 v2.5.0
 	k8s.io/api v0.35.1
 	k8s.io/apimachinery v0.35.1
