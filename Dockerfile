@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go
 # Note: Don't change /workdir/bin path. This path is being referenced in operator codebase.
 
 # Base image
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:29599cb2a44f3275232bc5fc48d26e069e8ba72b710229bed6652633725aa31a
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:fa956af586b367c3366ac4376c3ee42a1141792b482e77d57aefb813f740f04d
 
 # Maintainer
 LABEL maintainer="Aerospike, Inc. <developers@aerospike.com>"
