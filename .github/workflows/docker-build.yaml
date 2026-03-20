@@ -52,7 +52,7 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         if: ${{ github.ref_type == 'tag' }}
-        uses: aws-actions/amazon-ecr-login@c962da2960ed15f492addc26fffa274485265950 # v2.0.2
+        uses: aws-actions/amazon-ecr-login@261fc3d4806db1fa66a15cc11113c456db8870a7 # v2.1.0
 
       - name: Set image tag env
         # GITHUB_HEAD_REF will be set in case of PR and contains the branch name. Replace / with - in branch name
