@@ -2,7 +2,7 @@
 # Aerospike Kubernetes Operator Init Container.
 #
 # Build the akoinit binary
-FROM --platform=$BUILDPLATFORM golang:1.25@sha256:931c889bca758a82fcbfcb1b6ed6ca1de30783e9e52e6093ad50060735cb99be AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25@sha256:3ac2864710f25e84381bf5d4272261c7ba73ada0339d62034df4de20dabb33ca AS builder
 
 # OS and Arch args
 ARG TARGETOS
