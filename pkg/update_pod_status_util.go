@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-logr/logr"
 	jp "gomodules.xyz/jsonpatch/v2"
+	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
@@ -350,36 +351,56 @@ func removeOldFormattedVolumeName(initializedVolumes []string) []string {
 	return initVolumes
 }
 
-func (initp *InitParams) getNamespaceVolumePaths() (
-	devicePaths, filePaths []string) {
+func (initp *InitParams) getNamespaceVolumePaths() (devicePaths, filePaths []string, err error) {
+	templatePath := filepath.Join(configMapDir, "aerospike.template.yaml")
+
+	data, err := os.ReadFile(templatePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read %s: %w", templatePath, err)
+	}
+
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse %s: %w", templatePath, err)
+	}
+
+	namespaces, ok := config["namespaces"].(map[string]interface{})
+	if !ok {
+		return nil, nil, fmt.Errorf("namespaces section missing or invalid in %s", templatePath)
+	}
+
 	devicePathsSet := sets.NewString()
 	filePathsSet := sets.NewString()
 
-	namespaces := initp.rack.AerospikeConfig.Value["namespaces"].([]interface{})
-	for _, namespace := range namespaces {
-		storageEngine := namespace.(map[string]interface{})["storage-engine"].(map[string]interface{})
+	for _, nsVal := range namespaces {
+		ns, ok := nsVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		storageEngine, ok := ns["storage-engine"].(map[string]interface{})
+		if !ok {
+			continue
+		}
 
 		if storageEngine["devices"] != nil {
 			for _, deviceInterface := range storageEngine["devices"].([]interface{}) {
-				initp.logger.Info("Got device paths", "pod-name", initp.podName, " storage-engine-type",
-					storageEngine["type"], " devices", deviceInterface.(string))
+				initp.logger.Info("Got device paths", "pod-name", initp.podName,
+					"storage-engine-type", storageEngine["type"], "devices", deviceInterface.(string))
 				devicePathsSet.Insert(strings.Fields(deviceInterface.(string))...)
 			}
 		}
 
 		if storageEngine["files"] != nil {
 			for _, fileInterface := range storageEngine["files"].([]interface{}) {
-				initp.logger.Info("Got file paths ", "pod-name", initp.podName, " storage-engine-type",
-					storageEngine["type"], " files", fileInterface.(string))
+				initp.logger.Info("Got file paths", "pod-name", initp.podName,
+					"storage-engine-type", storageEngine["type"], "files", fileInterface.(string))
 				filePathsSet.Insert(strings.Fields(fileInterface.(string))...)
 			}
 		}
 	}
 
-	devicePaths = devicePathsSet.List()
-	filePaths = filePathsSet.List()
-
-	return devicePaths, filePaths
+	return devicePathsSet.List(), filePathsSet.List(), nil
 }
 
 func remove(s []string, r string) []string {
@@ -602,7 +623,10 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 			return err
 		}
 
-		nsDevicePaths, nsFilePaths := initp.getNamespaceVolumePaths()
+		nsDevicePaths, nsFilePaths, err := initp.getNamespaceVolumePaths()
+		if err != nil {
+			return err
+		}
 
 		initp.logger.Info("Checking if volumes should be wiped", "podname", initp.podName)
 
@@ -644,7 +668,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 	metadata.DynamicConfigUpdateStatus = ""
 	metadata.RackIDOverridden = ptr.Deref(initp.aeroCluster.Spec.EnableRackIDOverride, false)
 
-	data, err := os.ReadFile(aerospikeConf)
+	data, err := os.ReadFile(aerospikeYAML)
 	if err != nil {
 		return err
 	}
@@ -661,7 +685,7 @@ func (initp *InitParams) manageVolumesAndUpdateStatus(ctx context.Context, resta
 			pod.Annotations = make(map[string]string)
 		}
 
-		pod.Annotations["aerospikeConf"] = string(data)
+		pod.Annotations["aerospikeYaml"] = string(data)
 
 		// Patch the resource
 		if err := initp.k8sClient.Update(ctx, pod); err != nil {

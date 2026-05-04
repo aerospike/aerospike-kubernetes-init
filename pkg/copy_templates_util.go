@@ -17,9 +17,9 @@ func (initp *InitParams) copyTemplates(source, destination string) error {
 		return fmt.Errorf("template destination volume not specified")
 	}
 
-	initp.logger.Info("Installing aerospike.conf", "source", source, "destination", destination)
+	initp.logger.Info("Installing aerospike.yaml", "source", source, "destination", destination)
 
-	filesToCopy := [2]string{"aerospike.template.conf", "peers"}
+	filesToCopy := [2]string{"aerospike.template.yaml", "peers"}
 	for _, file := range filesToCopy {
 		path := filepath.Join(source, file)
 

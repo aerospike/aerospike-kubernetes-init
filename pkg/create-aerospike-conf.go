@@ -5,11 +5,11 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
 	asdbv1 "github.com/aerospike/aerospike-kubernetes-operator/v4/api/v1"
+	"gopkg.in/yaml.v3"
 )
 
 //go:embed fips-confs/openssl.cnf
@@ -19,7 +19,8 @@ var opensslCnf []byte
 var fipsCnf []byte
 
 const (
-	aerospikeTemplateConf = "/etc/aerospike/aerospike.template.conf"
+	aerospikeTemplateConf = "/etc/aerospike/aerospike.template.yaml"
+	aerospikeYAML         = "/etc/aerospike/aerospike.yaml"
 	aerospikeConf         = "/etc/aerospike/aerospike.conf"
 	peers                 = "/etc/aerospike/peers"
 	aerospikeOpensslCnf   = "/etc/aerospike/openssl.cnf"
@@ -28,6 +29,10 @@ const (
 	alternateAccess       = "alternate-access"
 	tlsAccess             = "tls-access"
 	tlsAlternateAccess    = "tls-alternate-access"
+
+	// minServerNativeYAMLVersion is the minimum Aerospike server version that
+	// supports the native YAML config format (aerospike.yaml).
+	minServerNativeYAMLVersion = "8.1.1"
 )
 
 func (initp *InitParams) createAerospikeConf() error {
@@ -36,44 +41,51 @@ func (initp *InitParams) createAerospikeConf() error {
 		return err
 	}
 
-	confString := string(data)
+	var config map[string]interface{}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("failed to parse template YAML: %w", err)
+	}
 
-	// Update node ids in configuration file
-	confString = strings.ReplaceAll(confString, "ENV_NODE_ID", initp.nodeID)
+	// Update node-id in service section
+	if svc, ok := config["service"].(map[string]interface{}); ok {
+		if nodeID, ok := svc["node-id"].(string); ok && nodeID == "ENV_NODE_ID" {
+			svc["node-id"] = initp.nodeID
+		}
+	}
+
+	network := getOrCreateSubMap(config, "network")
 
 	if initp.networkInfo.servicePort != 0 {
-		confString = initp.substituteEndpoint(
-			initp.networkInfo.networkPolicy.AccessType, access, initp.networkInfo.configureAccessIP,
-			initp.networkInfo.customAccessNetworkIPs, confString)
-		confString = initp.substituteEndpoint(
-			initp.networkInfo.networkPolicy.AlternateAccessType, alternateAccess, initp.networkInfo.configuredAlterAccessIP,
-			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
+		initp.substituteEndpoint(
+			network, initp.networkInfo.networkPolicy.AccessType, access,
+			initp.networkInfo.configureAccessIP, initp.networkInfo.customAccessNetworkIPs)
+		initp.substituteEndpoint(
+			network, initp.networkInfo.networkPolicy.AlternateAccessType, alternateAccess,
+			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customAlternateAccessNetworkIPs)
 	}
 
 	if initp.networkInfo.serviceTLSPort != 0 {
-		confString = initp.substituteEndpoint(
-			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
-			initp.networkInfo.customTLSAccessNetworkIPs, confString)
-		confString = initp.substituteEndpoint(
-			initp.networkInfo.networkPolicy.TLSAlternateAccessType, tlsAlternateAccess,
-			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customTLSAlternateAccessNetworkIPs, confString)
+		initp.substituteEndpoint(
+			network, initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess,
+			initp.networkInfo.configureAccessIP, initp.networkInfo.customTLSAccessNetworkIPs)
+		initp.substituteEndpoint(
+			network, initp.networkInfo.networkPolicy.TLSAlternateAccessType, tlsAlternateAccess,
+			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customTLSAlternateAccessNetworkIPs)
 	}
+
+	fabric := getOrCreateSubMap(network, "fabric")
 
 	if initp.networkInfo.fabricPort != 0 &&
 		initp.networkInfo.networkPolicy.FabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
-		for _, ip := range initp.networkInfo.customFabricNetworkIPs {
-			confString = strings.ReplaceAll(confString, "fabric {",
-				fmt.Sprintf("fabric {\n        address %s", ip))
-		}
+		fabric["address"] = toInterfaceSlice(initp.networkInfo.customFabricNetworkIPs)
 	}
 
 	if initp.networkInfo.fabricTLSPort != 0 &&
 		initp.networkInfo.networkPolicy.TLSFabricType == asdbv1.AerospikeNetworkTypeCustomInterface {
-		for _, ip := range initp.networkInfo.customTLSFabricNetworkIPs {
-			confString = strings.ReplaceAll(confString, "fabric {",
-				fmt.Sprintf("fabric {\n        tls-address %s", ip))
-		}
+		fabric["tls-address"] = toInterfaceSlice(initp.networkInfo.customTLSFabricNetworkIPs)
 	}
+
+	heartbeat := getOrCreateSubMap(network, "heartbeat")
 
 	readFile, err := os.Open(peers)
 	if err != nil {
@@ -84,7 +96,7 @@ func (initp *InitParams) createAerospikeConf() error {
 
 	fileScanner := bufio.NewScanner(readFile)
 
-	// Update mesh seeds in the configuration file
+	// Update mesh seeds in the configuration
 	for fileScanner.Scan() {
 		peer := fileScanner.Text()
 		if strings.Contains(peer, initp.podName) {
@@ -92,58 +104,84 @@ func (initp *InitParams) createAerospikeConf() error {
 		}
 
 		if initp.networkInfo.heartBeatPort != 0 {
-			confString = strings.ReplaceAll(confString, "heartbeat {",
-				fmt.Sprintf("heartbeat {\n        mesh-seed-address-port %s %d", peer, initp.networkInfo.heartBeatPort))
+			appendToStringList(heartbeat, "mesh-seed-address-ports",
+				fmt.Sprintf("%s:%d", peer, initp.networkInfo.heartBeatPort))
 		}
 
 		if initp.networkInfo.heartBeatTLSPort != 0 {
-			confString = strings.ReplaceAll(confString, "heartbeat {",
-				fmt.Sprintf("heartbeat {\n        tls-mesh-seed-address-port %s %d", peer, initp.networkInfo.heartBeatTLSPort))
+			appendToStringList(heartbeat, "tls-mesh-seed-address-ports",
+				fmt.Sprintf("%s:%d", peer, initp.networkInfo.heartBeatTLSPort))
 		}
 	}
 
-	// If host networking is used force heartbeat and fabric to advertise network
-	// interface bound to K8s node's host network.
+	// If host networking is used, force heartbeat and fabric to advertise the
+	// network interface bound to the K8s node's host network.
 	if initp.networkInfo.hostNetwork {
-		// 8 spaces, fixed in config writer file config manager lib
-		// TODO: The search pattern is not robust. Add a better marker in management lib.
 		if initp.networkInfo.heartBeatPort != 0 {
-			confString = strings.ReplaceAll(confString, "heartbeat {",
-				fmt.Sprintf("heartbeat {\n        address %s", initp.networkInfo.podIP))
+			heartbeat["address"] = initp.networkInfo.podIP
 		}
 
 		if initp.networkInfo.heartBeatTLSPort != 0 {
-			confString = strings.ReplaceAll(confString, "heartbeat {",
-				fmt.Sprintf("heartbeat {\n        tls-address %s", initp.networkInfo.podIP))
+			heartbeat["tls-address"] = initp.networkInfo.podIP
 		}
 
 		if initp.networkInfo.fabricPort != 0 {
-			confString = strings.ReplaceAll(confString, "fabric {",
-				fmt.Sprintf("fabric {\n        address %s", initp.networkInfo.podIP))
+			fabric["address"] = initp.networkInfo.podIP
 		}
 
 		if initp.networkInfo.fabricTLSPort != 0 {
-			confString = strings.ReplaceAll(confString, "fabric {",
-				fmt.Sprintf("fabric {\n        tls-address %s", initp.networkInfo.podIP))
+			fabric["tls-address"] = initp.networkInfo.podIP
 		}
 	}
 
 	// Update namespace sections with rack-id from pod annotation
-	confString = initp.updateNamespaceRackID(confString)
+	initp.updateNamespaceRackID(config)
 
-	// Remove escape sequence from LDAP configuration if any
-	confString = strings.ReplaceAll(confString, "$${_DNE}{un}", "${un}")
-	confString = strings.ReplaceAll(confString, "$${_DNE}{dn}", "${dn}")
-
-	if err = os.WriteFile(aerospikeConf, []byte(confString), 0644); err != nil { //nolint:gocritic,gosec // file permission
-		return err
+	out, err := yaml.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config YAML: %w", err)
 	}
+
+	// Remove LDAP escape sequences if any
+	outStr := strings.ReplaceAll(string(out), "$${_DNE}{un}", "${un}")
+	outStr = strings.ReplaceAll(outStr, "$${_DNE}{dn}", "${dn}")
 
 	if err := os.Remove(aerospikeTemplateConf); err != nil {
 		return err
 	}
 
-	initp.logger.Info(fmt.Sprintf("Final aerospike conf file %s: \n%s", aerospikeConf, confString))
+	initp.logger.Info(fmt.Sprintf("Generated aerospike YAML config %s: \n%s", aerospikeYAML, outStr))
+
+	// For servers >= 8.1.1 the native YAML file is used directly.
+	// For older servers, convert the YAML to the legacy .conf format.
+	serverVersion, err := asdbv1.GetImageVersion(initp.aeroCluster.Spec.Image)
+	if err != nil {
+		return fmt.Errorf("failed to get server version from image %q: %w", initp.aeroCluster.Spec.Image, err)
+	}
+
+	if serverSupportsNativeYAML(serverVersion) {
+		if err = os.WriteFile(aerospikeYAML, []byte(outStr), 0644); err != nil { //nolint:gocritic,gosec // file permission
+			return err
+		}
+
+		initp.logger.Info(fmt.Sprintf("Server version %s supports native YAML, using %s", serverVersion, aerospikeYAML))
+		return nil
+	}
+
+	initp.logger.Info(fmt.Sprintf("Server version %s does not support native YAML, converting to %s", serverVersion, aerospikeConf))
+
+	confStr, err := nativeYAMLToConf([]byte(outStr), initp.logger)
+	if err != nil {
+		return fmt.Errorf("failed to convert native YAML to conf: %w", err)
+	}
+
+	if err = os.WriteFile(aerospikeConf, []byte(confStr), 0644); err != nil { //nolint:gocritic,gosec // file permission
+		return fmt.Errorf("failed to write %s: %w", aerospikeConf, err)
+	}
+
+	// aerospikeYAML is intentionally kept alongside aerospikeConf so that
+	// manageVolumesAndUpdateStatus can always read the YAML for the pod annotation.
+	initp.logger.Info(fmt.Sprintf("Converted native YAML to legacy conf: %s", aerospikeConf))
 
 	return nil
 }
@@ -165,31 +203,40 @@ func (initp *InitParams) createAerospikeOpensslAndFipsCnf() error {
 	return nil
 }
 
-// updateNamespaceRackID replaces rack-id field in namespace sections
-// using the value from pod annotation "aerospike.com/override-rack-id"
-// Only proceeds if EnableRackIDOverride is set to true in AerospikeCluster CR spec
-// Only replaces rack-id if it exists in the template, does not add if missing
-func (initp *InitParams) updateNamespaceRackID(confString string) string {
-	// Check if dynamic rack-id is enabled in AerospikeCluster CR spec
+// updateNamespaceRackID replaces rack-id field in each namespace section of the config map
+// using the value from pod annotation "aerospike.com/override-rack-id".
+// Only proceeds if EnableRackIDOverride is set to true in AerospikeCluster CR spec.
+// Only replaces rack-id if it already exists in the namespace, does not add if missing.
+func (initp *InitParams) updateNamespaceRackID(config map[string]interface{}) {
 	if !asdbv1.GetBool(initp.aeroCluster.Spec.EnableRackIDOverride) {
 		initp.logger.Info("EnableRackIDOverride not set, skipping rack-id update")
-		return confString
+		return
 	}
 
 	initp.logger.Info("Updating namespace sections with override rack-id", "rack-id", initp.overrideRackID)
 
-	// Use regex to replace all rack-id values with the annotation value
-	rackIDPattern := regexp.MustCompile(`rack-id\s+\d+`)
-	result := rackIDPattern.ReplaceAllString(confString, fmt.Sprintf("rack-id    %d", initp.overrideRackID))
+	namespaces, ok := config["namespaces"].(map[string]interface{})
+	if !ok {
+		return
+	}
 
-	return result
+	for _, nsVal := range namespaces {
+		ns, ok := nsVal.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		if _, exists := ns["rack-id"]; exists {
+			ns["rack-id"] = initp.overrideRackID
+		}
+	}
 }
 
-// Update access addresses in the configuration file
-// Compute the access endpoints based on network policy.
-// As a kludge the computed values are stored late to update node summary.
-func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkType,
-	addressType, configuredIP string, interfaceIPs []string, confString string) string {
+// substituteEndpoint computes the access endpoints based on network policy and writes
+// them directly into the network.service section of the config map.
+// The computed values are also stored on networkInfo to update the node status later.
+func (initp *InitParams) substituteEndpoint(network map[string]interface{}, networkType asdbv1.AerospikeNetworkType,
+	addressType, configuredIP string, interfaceIPs []string) {
 	var (
 		accessAddress []string
 		accessPort    int32
@@ -256,23 +303,74 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		initp.networkInfo.globalAddressesAndPorts.globalTLSAlternateAccessPort = accessPort
 	}
 
-	// Substitute in the configuration file.
-	// If multiple IPs are found, then add all of them in the specific addressType
-	var newStr string
-	for _, addr := range accessAddress {
-		newStr += fmt.Sprintf("%s-address    %s\n        ", addressType, addr)
+	// Write computed addresses and port into the YAML config map.
+	svc := getOrCreateSubMap(network, "service")
+	svc[addressType+"-addresses"] = toInterfaceSlice(accessAddress)
+	svc[addressType+"-port"] = int(accessPort)
+}
+
+func getOrCreateSubMap(parent map[string]interface{}, key string) map[string]interface{} {
+	if sub, ok := parent[key].(map[string]interface{}); ok {
+		return sub
 	}
 
-	confString = strings.ReplaceAll(confString, fmt.Sprintf("%s-address    <%s-address>", addressType, addressType),
-		strings.TrimSuffix(newStr, "\n        "))
+	sub := map[string]interface{}{}
+	parent[key] = sub
 
-	re := regexp.MustCompile(fmt.Sprintf("\\s*%s-port\\s*%d", addressType, servicePort))
+	return sub
+}
 
-	if portString := re.FindString(confString); portString != "" {
-		// # This port is set in api/v1beta1/aerospikecluster_mutating_webhook.go and is used as placeholder.
-		confString = strings.ReplaceAll(confString, portString,
-			strings.ReplaceAll(portString, strconv.Itoa(int(servicePort)), strconv.Itoa(int(accessPort))))
+func toInterfaceSlice(ss []string) []interface{} {
+	out := make([]interface{}, len(ss))
+	for i, s := range ss {
+		out[i] = s
 	}
 
-	return confString
+	return out
+}
+
+func appendToStringList(m map[string]interface{}, key, value string) {
+	if existing, ok := m[key].([]interface{}); ok {
+		m[key] = append(existing, value)
+	} else {
+		m[key] = []interface{}{value}
+	}
+}
+
+// serverSupportsNativeYAML returns true when the given server version is at
+// least minServerNativeYAMLVersion (8.1.1). Only the major.minor.patch
+// components are compared; the build suffix (e.g. the fourth component) is
+// ignored.
+func serverSupportsNativeYAML(serverVersion string) bool {
+	return compareVersions(serverVersion, minServerNativeYAMLVersion) >= 0
+}
+
+// compareVersions compares two dot-separated version strings by their first
+// three numeric components (major.minor.patch). It returns -1, 0, or 1 when
+// a is less than, equal to, or greater than b respectively.
+func compareVersions(a, b string) int {
+	aParts := strings.SplitN(a, ".", 4)
+	bParts := strings.SplitN(b, ".", 4)
+
+	for i := range 3 {
+		var aNum, bNum int
+
+		if i < len(aParts) {
+			aNum, _ = strconv.Atoi(aParts[i])
+		}
+
+		if i < len(bParts) {
+			bNum, _ = strconv.Atoi(bParts[i])
+		}
+
+		if aNum < bNum {
+			return -1
+		}
+
+		if aNum > bNum {
+			return 1
+		}
+	}
+
+	return 0
 }
