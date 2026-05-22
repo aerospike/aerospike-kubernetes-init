@@ -15,7 +15,7 @@ jobs:
       IMG_BASE: ${{ github.repository }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
         with:
           egress-policy: audit
 
@@ -52,7 +52,7 @@ jobs:
       - name: Login to Amazon ECR
         id: login-ecr
         if: ${{ github.ref_type == 'tag' }}
-        uses: aws-actions/amazon-ecr-login@19d944daaa35f0fa1d3f7f8af1d3f2e5de25c5b7 # v2.1.4
+        uses: aws-actions/amazon-ecr-login@fa648b43de3d4d023bcb3f89ed6940096949c419 # v2.1.5
 
       - name: Set image tag env
         # GITHUB_HEAD_REF will be set in case of PR and contains the branch name. Replace / with - in branch name
