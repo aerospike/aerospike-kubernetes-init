@@ -2,7 +2,7 @@
 # Aerospike Kubernetes Operator Init Container.
 #
 # Build the akoinit binary
-FROM --platform=$BUILDPLATFORM golang:1.25@sha256:3ac2864710f25e84381bf5d4272261c7ba73ada0339d62034df4de20dabb33ca AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25@sha256:cd05a378aaf011e8056745363e5c40f4f2bef0fa4d9bf19b9c38316079c332ff AS builder
 
 # OS and Arch args
 ARG TARGETOS
@@ -26,7 +26,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GO111MODULE=on go
 # Note: Don't change /workdir/bin path. This path is being referenced in operator codebase.
 
 # Base image
-FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:2a4785f399dc7ae2f3ca85f68bac0ccac47f3e73464a47c21e4f7ae46b55a053
+FROM registry.access.redhat.com/ubi10/ubi-minimal:latest@sha256:6edd84087c7c05b9464de987d9a9bc210be1ec9c426aa6c5aaff39aa32f0bbc3
 
 # Maintainer
 LABEL maintainer="Aerospike, Inc. <developers@aerospike.com>"
