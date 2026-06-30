@@ -11,6 +11,8 @@ jobs:
   build-and-push:
     name: Build and push image
     runs-on: ubuntu-latest
+    outputs:
+      TAG: ${{ steps.set-tag.outputs.TAG }}
     env:
       IMG_BASE: ${{ github.repository }}
     steps:
@@ -30,8 +32,8 @@ jobs:
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
         if: ${{ github.ref_type == 'tag' }}
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.AEROSPIKE_DOCKER_ORG_NAME }}
+          password: ${{ secrets.AEROSPIKE_DOCKER_ORG_RW_TOKEN }}
 
       - name: Login to Quay.io
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -55,14 +57,17 @@ jobs:
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
 
       - name: Set image tag env
+        id: set-tag
         # GITHUB_HEAD_REF will be set in case of PR and contains the branch name. Replace / with - in branch name
         # GITHUB_REF_NAME contains the git tag.
         run: |
           if [[ $GITHUB_HEAD_REF != '' ]]; then
             NEW_GITHUB_HEAD_REF="${GITHUB_HEAD_REF//\//-}" 
             echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_ENV"
+            echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_OUTPUT"
           else
             echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build and push image
@@ -90,3 +95,42 @@ jobs:
       - name: Check docker image scan status
         if: ${{ steps.docker-image-scan.outcome == 'failure' }}
         run: exit 1
+
+  certify-image:
+    name: Red Hat Preflight Certification
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    # Only run certification for release tags (not dev tags or PRs)
+    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-dev') }}
+    env:
+      QUAY_IMAGE: quay.io/${{ github.repository }}:${{ needs.build-and-push.outputs.TAG }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+
+      - name: Install preflight
+        uses: redhat-actions/openshift-tools-installer@v1
+        with:
+          source: "github"
+          github_pat: ${{ github.token }}
+          preflight: "latest"
+
+      - name: Login to Quay.io
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Run preflight checks and submit certification results to Red Hat
+        env:
+          PFLT_PYXIS_API_TOKEN: ${{ secrets.PFLT_PYXIS_API_TOKEN }}
+          PFLT_CERTIFICATION_COMPONENT_ID: ${{ secrets.PFLT_CERTIFICATION_COMPONENT_ID }}
+        run: |
+          preflight check container "$QUAY_IMAGE" \
+            --submit \
+            --pyxis-api-token="$PFLT_PYXIS_API_TOKEN" \
+            --certification-component-id="$PFLT_CERTIFICATION_COMPONENT_ID" \
+            --docker-config="$HOME/.docker/config.json"
