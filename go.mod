@@ -3,7 +3,7 @@ module github.com/aerospike/aerospike-kubernetes-init
 go 1.25.10
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.4.1-0.20260526054304-f0c0bf59170f
+	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.4.2-0.20260630065943-85e3cc487919
 	github.com/go-logr/logr v1.4.3
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/mitchellh/go-ps v1.0.0
