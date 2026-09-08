@@ -43,6 +43,10 @@ fmt: ## Run go fmt against code.
 vet: ## Run go vet against code.
 	go vet ./...
 
+.PHONY: test
+test: fmt vet ## Run unit tests.
+	go test -race -coverprofile=cover.out ./...
+
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
