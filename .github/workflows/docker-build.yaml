@@ -62,7 +62,7 @@ jobs:
         # GITHUB_REF_NAME contains the git tag.
         run: |
           if [[ $GITHUB_HEAD_REF != '' ]]; then
-            NEW_GITHUB_HEAD_REF="${GITHUB_HEAD_REF//\//-}" 
+            NEW_GITHUB_HEAD_REF="${GITHUB_HEAD_REF//\//-}"
             echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_ENV"
             echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_OUTPUT"
           else
@@ -83,6 +83,7 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
+          command: container test
           image: ${{ env.IMG_BASE }}:${{ env.TAG }}
           args: --file=Dockerfile --severity-threshold=high --fail-on=all # fail on vulnerabilities with fix available
 
