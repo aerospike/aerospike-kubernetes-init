@@ -3,7 +3,7 @@ module github.com/aerospike/aerospike-kubernetes-init
 go 1.26.8
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.5.1-0.20261007171410-1b85ac2c3084
+	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.5.1-0.20261008141932-77826f62daca
 	github.com/go-logr/logr v1.4.3
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/mitchellh/go-ps v1.0.0
@@ -18,7 +18,7 @@ require (
 
 require (
 	github.com/aerospike/aerospike-client-go/v8 v8.9.0 // indirect
-	github.com/aerospike/aerospike-management-lib v1.11.2-0.20260929120930-d90690f69e0a // indirect
+	github.com/aerospike/aerospike-management-lib v1.12.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
