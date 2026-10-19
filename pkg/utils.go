@@ -176,31 +176,43 @@ func getNodeIDFromPodName(aeroCluster *asdbv1.AerospikeCluster, podName string) 
 // Allowed infixes are the characters in the `allowed` constant: "b", "c", "d", "e", "f".
 //
 // Selection precedence:
-//  1. If the pod with the same name already exists in `aeroCluster.Status.Pods`, reuse that pod's NodeID infix.
-//  2. Otherwise, among pods in Status with the same `rackID`:
-//     a. If a pod with the same `rackRevision` exists, reuse that infix.
-//     b. If only other revision is present, avoid that revision's infix and pick any allowed infix that doesn't clash.
-//  3. If no infix can be chosen by the above rules, return a deterministic default of "b".
+//  1. If this pod already has a NodeID in Status.Pods (e.g. pod restarted without revision change),
+//     reuse that infix directly — no change needed.
+//  2. If another pod of the same rackID and same rackRevision already exists in Status, reuse its
+//     infix — all pods in a revision share the same infix.
+//  3. Otherwise, check whether a same-ordinal pod from a *different* revision is still alive in
+//     Status (i.e. the old pod has not been removed yet):
+//     a. If the old same-ordinal pod IS still in Status: its NodeID is active in the Aerospike
+//     cluster, so choose a different infix to avoid a NodeID collision.
+//     b. If the old same-ordinal pod is NOT in Status (already drained — the normal case with
+//     staged scale-up): there is no active NodeID conflict, so reuse the stable default
+//     infix "b". This keeps node IDs identical across rack revisions when the replace-before-
+//     create ordering is respected.
+//  4. Fallback: "b".
 //
-// The function returns the chosen single-character infix as a string, or an error if status pod name parsing fails.
+// The function returns the chosen single-character infix as a string, or an error if status pod
+// name parsing fails.
 func determineNodeIDInfix(
 	aeroCluster *asdbv1.AerospikeCluster, rackID int, podName,
 	rackRevision string,
 ) (string, error) {
 	const allowed = "bcdef"
 
-	// If this pod already has a NodeID in status, reuse its infix directly
+	// Rule 1: pod already has a NodeID in status (restart without revision change) — reuse it.
 	if podStatus, ok := aeroCluster.Status.Pods[podName]; ok {
 		return extractInfixFromNodeID(podStatus.Aerospike.NodeID, rackID), nil
 	}
 
-	// With at most 2 revisions: reuse same-revision infix if found; otherwise avoid the other revision's infix
+	// Extract the pod's ordinal (last "-<N>" segment) to detect same-ordinal conflicts precisely.
+	newOrdinal := podName[strings.LastIndex(podName, "-")+1:]
+
 	var (
-		otherRevisionInfix byte
-		otherRevisionFound bool
+		sameRevisionInfix     string
+		conflictingInfix      byte
+		conflictingInfixFound bool
 	)
 
-	for name := range aeroCluster.Status.Pods {
+	for name, statusPod := range aeroCluster.Status.Pods {
 		statusRackID, statusRackRevision, err := utils.GetRackIDAndRevisionFromPodName(aeroCluster.Name, name)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse rack info from podName %s: %v", name, err)
@@ -210,26 +222,44 @@ func determineNodeIDInfix(
 			continue
 		}
 
-		infix := extractInfixFromNodeID(aeroCluster.Status.Pods[name].Aerospike.NodeID, statusRackID)
+		infix := extractInfixFromNodeID(statusPod.Aerospike.NodeID, statusRackID)
 
+		// Rule 2: same revision already has pods in Status — reuse their infix.
 		if statusRackRevision == rackRevision {
-			return infix, nil
+			sameRevisionInfix = infix
+			break
 		}
 
-		otherRevisionInfix = infix[0]
-		otherRevisionFound = true
-
-		break
+		// Rule 3: different revision — only a conflict if the ordinal is identical (same NodeID).
+		// Pods on the old revision with a *different* ordinal have distinct NodeIDs and do not
+		// conflict, so they do not influence infix selection.
+		statusOrdinal := name[strings.LastIndex(name, "-")+1:]
+		if statusOrdinal == newOrdinal {
+			conflictingInfix = infix[0]
+			conflictingInfixFound = true
+		}
 	}
 
-	// Pick any allowed infix except the other revision's infix
+	// Rule 2 result: same-revision infix found.
+	if sameRevisionInfix != "" {
+		return sameRevisionInfix, nil
+	}
+
+	// Rule 3b: no same-ordinal pod from the old revision is alive → no NodeID conflict.
+	// Return the stable default "b" so node IDs remain unchanged across revisions when
+	// staged scale-up (remove-before-create) ordering is respected.
+	if !conflictingInfixFound {
+		return string(allowed[0]), nil // "b"
+	}
+
+	// Rule 3a: old pod with the same ordinal is still alive — must avoid its infix.
 	for i := 0; i < len(allowed); i++ {
-		if !otherRevisionFound || allowed[i] != otherRevisionInfix {
+		if allowed[i] != conflictingInfix {
 			return string(allowed[i]), nil
 		}
 	}
 
-	// Fallback: deterministic default
+	// Fallback: deterministic default.
 	return "b", nil
 }
 
