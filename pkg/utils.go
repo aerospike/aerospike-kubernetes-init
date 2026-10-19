@@ -248,28 +248,50 @@ func getRack(logger logr.Logger, podName string, aeroCluster *asdbv1.AerospikeCl
 
 	logger.Info("Looking for rack in rackConfig", "rack-id", rackID, "rack-revision", rackRevision)
 
-	racks := aeroCluster.Spec.RackConfig.Racks
-	for idx := range racks {
-		rack := &racks[idx]
-		if rack.ID == rackID && rack.Revision == rackRevision {
-			return rack, nil
-		}
+	if rack := findRack(aeroCluster.Spec.RackConfig.Racks, rackID, rackRevision, true); rack != nil {
+		return rack, nil
 	}
 
-	logger.Info("Rack not found in spec, checking in status", "rack-id", rackID, "rack-revision",
-		rackRevision)
+	logger.Info("Rack not found in spec, checking in status", "rack-id", rackID, "rack-revision", rackRevision)
 
-	// If not found in spec, check in status. This will be case when rackRevision is changed and old rack pod got
-	// restarted somehow
-	racks = aeroCluster.Status.RackConfig.Racks
-	for idx := range racks {
-		rack := &racks[idx]
-		if rack.ID == rackID && rack.Revision == rackRevision {
-			return rack, nil
-		}
+	// An old-revision pod can restart after the spec has moved on. Its rack is still recorded in status.
+	if rack := findRack(aeroCluster.Status.RackConfig.Racks, rackID, rackRevision, true); rack != nil {
+		return rack, nil
 	}
 
-	return nil, fmt.Errorf("rack with rack-id %d not found", rackID)
+	// A revision revert can race the new pod's init container: the pod name still carries the
+	// abandoned revision, but that revision was never written to status and is already gone from spec.
+	// Use the same rack-id so init can finish and the operator can scale the pod away.
+	logger.Info("Rack revision not found in spec or status, falling back to rack-id",
+		"rack-id", rackID, "rack-revision", rackRevision)
+
+	if rack := findRack(aeroCluster.Spec.RackConfig.Racks, rackID, "", false); rack != nil {
+		return rack, nil
+	}
+
+	if rack := findRack(aeroCluster.Status.RackConfig.Racks, rackID, "", false); rack != nil {
+		return rack, nil
+	}
+
+	return nil, fmt.Errorf("rack with rack-id %d and revision %q not found", rackID, rackRevision)
+}
+
+// findRack returns the first rack with rackID. When matchRevision is set, rackRevision must match as well.
+func findRack(racks []asdbv1.Rack, rackID int, rackRevision string, matchRevision bool) *asdbv1.Rack {
+	for idx := range racks {
+		rack := &racks[idx]
+		if rack.ID != rackID {
+			continue
+		}
+
+		if matchRevision && rack.Revision != rackRevision {
+			continue
+		}
+
+		return rack
+	}
+
+	return nil
 }
 
 func (initp *InitParams) makeWorkDir() error {
