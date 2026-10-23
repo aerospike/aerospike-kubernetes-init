@@ -1,6 +1,6 @@
 module github.com/aerospike/aerospike-kubernetes-init
 
-go 1.26.8
+go 1.27.3
 
 require (
 	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.5.1-0.20261008141932-77826f62daca
