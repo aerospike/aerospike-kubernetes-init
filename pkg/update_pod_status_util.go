@@ -140,17 +140,8 @@ func (initp *InitParams) getNodeMetadata() *asdbv1.AerospikePodStatus {
 		},
 	}
 
-	if initp.isNodeNetwork() {
-		metadata.ServicePort = initp.networkInfo.mappedServicePort
-		if initp.networkInfo.serviceTLSPort != 0 {
-			metadata.ServicePort = initp.networkInfo.mappedServiceTLSPort
-		}
-
-		metadata.ServiceAdminPort = initp.networkInfo.mappedAdminPort
-		if initp.networkInfo.adminTLSPort != 0 {
-			metadata.ServiceAdminPort = initp.networkInfo.mappedAdminTLSPort
-		}
-	}
+	metadata.ServicePort = initp.computeServicePort()
+	metadata.ServiceAdminPort = initp.computeServiceAdminPort()
 
 	return metadata
 }
@@ -761,7 +752,8 @@ func (initp *InitParams) getEndpoints(addressType string) []string {
 
 		switch {
 		case host == nil:
-			continue
+			// FQDN (e.g. NLB address) — format directly as host:port.
+			endPoints = append(endPoints, addr+":"+strconv.Itoa(int(globalPort)))
 		case host.To4() != nil:
 			accessPoint := host.String() + ":" + strconv.Itoa(int(globalPort))
 			endPoints = append(endPoints, accessPoint)

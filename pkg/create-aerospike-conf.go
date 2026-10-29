@@ -232,6 +232,26 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 		accessAddress = interfaceIPs
 		accessPort = servicePort
 
+	case asdbv1.AerospikeNetworkTypeNLB:
+		// Address: shared NLB FQDN/IP from CR spec (same for all pods).
+		addr := nlbAddressForType(initp.aeroCluster.Spec.AerospikeNetworkPolicy, addressType)
+		if addr != "" {
+			accessAddress = append(accessAddress, addr)
+		}
+		// Port: unique per pod (servicePort + nlbPortOffset), or NodePort for multiPodPerHost=true.
+		accessPort = initp.nlbAdvertisedPort(servicePort, mappedServicePort)
+		// For multiPodPerHost=false, sync the correct mapped port field so getNodeMetadata()
+		// reports the right ServicePort in status. Only access/tlsAccess affect ServicePort;
+		// alternateAccess variants do not.
+		if !asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) {
+			switch addressType {
+			case access:
+				initp.networkInfo.mappedServicePort = accessPort
+			case tlsAccess:
+				initp.networkInfo.mappedServiceTLSPort = accessPort
+			}
+		}
+
 	default:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
 		accessPort = servicePort

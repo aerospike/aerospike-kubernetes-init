@@ -34,6 +34,7 @@ type InitParams struct {
 	workDir        string
 	logger         logr.Logger
 	overrideRackID int
+	nlbPortOffset  int32 // assigned NLB port offset (1-255), 0 if not using clusterNLB
 }
 
 func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
@@ -141,6 +142,10 @@ func PopulateInitParams(ctx goctx.Context) (*InitParams, error) {
 	}
 
 	if err := initParams.setNetworkInfo(ctx); err != nil {
+		return nil, err
+	}
+
+	if err := initParams.resolveNLBPortOffset(ctx); err != nil {
 		return nil, err
 	}
 
