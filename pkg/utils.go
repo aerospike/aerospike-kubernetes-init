@@ -439,9 +439,11 @@ func getHostIPS(ctx context.Context, k8sClient client.Client, hostIP string) (
 				matchFound = true
 			}
 
-			if add.Type == corev1.NodeInternalIP && net.ParseIP(add.Address).To4() != nil {
+			// Accept IPv6 as well as IPv4: on a single-stack IPv6 cluster the node
+			// addresses are the only addresses there are.
+			if add.Type == corev1.NodeInternalIP && net.ParseIP(add.Address) != nil {
 				nodeInternalIP = add.Address
-			} else if add.Type == corev1.NodeExternalIP && net.ParseIP(add.Address).To4() != nil {
+			} else if add.Type == corev1.NodeExternalIP && net.ParseIP(add.Address) != nil {
 				nodeExternalIP = add.Address
 			}
 		}
