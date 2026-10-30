@@ -37,24 +37,35 @@ jobs:
         with:
           egress-policy: audit
 
+      # Full history, so the last release tag is there for Compute version.
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
-      # e.g. pr-163-a1b2c3d, master-e4f5a6b. For a PR the SHA is the PR's head commit.
+      # e.g. 2.5.5-pr-163-a1b2c3d, 2.5.5-master-e4f5a6b. For a PR the SHA is the PR's head commit.
+      # The base is NEXT_VERSION, which must be newer than the last release tag,
+      # or the dev versions would sort below that release. The operator webhook
+      # also needs a version at the start of the init image tag.
       - name: Compute version
         id: version
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          base=$(sed -n 's/^VERSION ?= *//p' Makefile)
+          base=$(sed -n 's/^NEXT_VERSION ?= *//p' Makefile)
+          last=$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*')
+          if [ "$(printf '%s\n' "$last" "$base" | sort -V | tail -1)" = "$last" ]; then
+            echo "::error::NEXT_VERSION ($base) must be newer than the last release ($last). Bump it in the Makefile."
+            exit 1
+          fi
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             label="pr-$PR_NUMBER"
           else
             label="master"
           fi
           echo "base-version=$base" >> "$GITHUB_OUTPUT"
-          echo "version=$label-${SHA::7}" | tee -a "$GITHUB_OUTPUT"
+          echo "version=$base-$label-${SHA::7}" | tee -a "$GITHUB_OUTPUT"
 
   init-image:
     name: Init image
