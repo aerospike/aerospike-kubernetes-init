@@ -1,0 +1,145 @@
+# CI for pull requests and master.
+# Builds the init images, pushes them to JFrog and scans them.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions: {}
+
+# A new push to a PR cancels its previous run. Other runs are never cancelled.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Prepare
+    # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      base-version: ${{ steps.version.outputs.base-version }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      # Full history, so the last release tag is there for Compute version.
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # e.g. 2.5.5-pr-163-a1b2c3d, 2.5.5-master-e4f5a6b. For a PR the SHA is the PR's head commit.
+      # The base is NEXT_VERSION, which must be newer than the last release tag,
+      # or the dev versions would sort below that release. The operator webhook
+      # also needs a version at the start of the init image tag.
+      - name: Compute version
+        id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          base=$(sed -n 's/^NEXT_VERSION ?= *//p' Makefile)
+          last=$(git describe --tags --abbrev=0 --match '[0-9]*.[0-9]*.[0-9]*' --exclude '*-*')
+          if [ "$(printf '%s\n' "$last" "$base" | sort -V | tail -1)" = "$last" ]; then
+            echo "::error::NEXT_VERSION ($base) must be newer than the last release ($last). Bump it in the Makefile."
+            exit 1
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            label="pr-$PR_NUMBER"
+          else
+            label="master"
+          fi
+          echo "base-version=$base" >> "$GITHUB_OUTPUT"
+          echo "version=$base-$label-${SHA::7}" | tee -a "$GITHUB_OUTPUT"
+
+  init-image:
+    name: Init image
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      jf-project: platforms
+      image-name: aerospike-kubernetes-init
+      app-version: ${{ needs.prepare.outputs.version }}
+      jf-build-name: ako-init
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.base-version }}"}'
+
+  # Runs as the non-root user 1001, like docker-buildx-build-push-openshift.
+  openshift-image:
+    name: OpenShift init image
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@b4b1e9dc89314a2d542f9d6fe0ee150ad06f9860 # v5.0.0
+    with:
+      jf-project: platforms
+      image-name: aerospike-kubernetes-init-openshift
+      app-version: ${{ needs.prepare.outputs.version }}
+      jf-build-name: ako-init-openshift
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.base-version }}", "USER": "1001"}'
+
+  scan:
+    name: Vulnerability scan
+    needs: init-image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      INIT_IMG: ${{ needs.init-image.outputs.immutable-tag }}
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JFrog CLI
+        id: jf
+        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        env:
+          JF_URL: https://artifact.aerospike.io
+        with:
+          oidc-provider-name: gh-aerospike
+          oidc-audience: aerospike
+
+      - name: Login to JFrog
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: artifact.aerospike.io
+          username: ${{ steps.jf.outputs.oidc-user }}
+          password: ${{ steps.jf.outputs.oidc-token }}
+
+      - name: Set up Snyk
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04
+
+      # Same thresholds as docker-build.yaml
+      - name: Scan init image
+        run: |
+          docker pull "$INIT_IMG"
+          snyk container test "$INIT_IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
