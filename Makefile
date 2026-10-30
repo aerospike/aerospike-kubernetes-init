@@ -7,6 +7,12 @@ ROOT_DIR=$(shell git rev-parse --show-toplevel)
 PLATFORMS ?= linux/amd64,linux/arm64
 
 VERSION ?= 2.5.5
+
+# NEXT_VERSION is the release in development. CI builds versions from it, e.g. 2.5.6-pr-163-a1b2c3d.
+# Bump it in the release PR, together with VERSION (e.g. VERSION 2.5.6, NEXT_VERSION 2.5.7).
+# CI fails whenever it is not newer than the last release tag.
+NEXT_VERSION ?= 2.5.6
+
 # Image URL to use all building/pushing aerospike-kubernetes-init image targets
 IMG ?= aerospike/aerospike-kubernetes-init-nightly:${VERSION}
 
