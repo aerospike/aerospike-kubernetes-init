@@ -757,11 +757,21 @@ func (initp *InitParams) getEndpoints(addressType string) []string {
 	}
 
 	for _, addr := range globalAddresses {
+		if addr == "" {
+			continue
+		}
+
 		host := net.ParseIP(addr)
 
 		switch {
 		case host == nil:
-			continue
+			if initp.networkType(addressType) != asdbv1.AerospikeNetworkTypeNLB {
+				initp.logger.Error(fmt.Errorf("address %q is not an IP", addr),
+					"an FQDN is allowed only when the network type is clusterNLB")
+				os.Exit(1)
+			}
+
+			endPoints = append(endPoints, net.JoinHostPort(addr, strconv.Itoa(int(globalPort))))
 		case host.To4() != nil:
 			accessPoint := host.String() + ":" + strconv.Itoa(int(globalPort))
 			endPoints = append(endPoints, accessPoint)

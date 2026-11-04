@@ -298,8 +298,10 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 	netInfo := initp.networkInfo
 
 	// Sets up port related variables.
-	// User service ports only when MultiPodPerHost is true and node network is defined in NetworkPolicy
-	if asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) && initp.isNodeNetwork() {
+	// Use NodePorts when a per-pod Service exists: multiPodPerHost, or clusterNLB
+	// (which creates that Service even when multiPodPerHost is false).
+	if initp.isNodeNetwork() && (asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) ||
+		initp.networkInfo.networkPolicy.UsesClusterNLB()) {
 		if netInfo.mappedServicePort, netInfo.mappedServiceTLSPort, netInfo.mappedAdminPort,
 			netInfo.mappedAdminTLSPort, err = getPorts(
 			ctx, initp.k8sClient, initp.aeroCluster.Namespace, initp.podName); err != nil {

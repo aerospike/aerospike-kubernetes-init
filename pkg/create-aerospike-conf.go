@@ -4,6 +4,7 @@ import (
 	"bufio"
 	_ "embed"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -225,12 +226,30 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 			os.Exit(1)
 		}
 
+		if net.ParseIP(configuredIP) == nil {
+			initp.logger.Error(fmt.Errorf("address %q is not an IP", configuredIP),
+				"an FQDN is allowed only when the network type is clusterNLB")
+			os.Exit(1)
+		}
+
 		accessAddress = append(accessAddress, configuredIP)
 		accessPort = mappedServicePort
 
 	case asdbv1.AerospikeNetworkTypeCustomInterface:
 		accessAddress = interfaceIPs
 		accessPort = servicePort
+
+	case asdbv1.AerospikeNetworkTypeNLB:
+		nlbAddr := nlbAddress(addressType, &initp.networkInfo.networkPolicy)
+		if nlbAddr == "" {
+			initp.logger.Error(fmt.Errorf("nlb address missing"),
+				fmt.Sprintf("set nlbAddress to use network type %s for %s",
+					asdbv1.AerospikeNetworkTypeNLB, addressType))
+			os.Exit(1)
+		}
+
+		accessAddress = append(accessAddress, nlbAddr)
+		accessPort = mappedServicePort
 
 	default:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
@@ -275,4 +294,32 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 	}
 
 	return confString
+}
+
+func (initp *InitParams) networkType(addressType string) asdbv1.AerospikeNetworkType {
+	switch addressType {
+	case access:
+		return initp.networkInfo.networkPolicy.AccessType
+	case alternateAccess:
+		return initp.networkInfo.networkPolicy.AlternateAccessType
+	case tlsAccess:
+		return initp.networkInfo.networkPolicy.TLSAccessType
+	case tlsAlternateAccess:
+		return initp.networkInfo.networkPolicy.TLSAlternateAccessType
+	default:
+		return ""
+	}
+}
+
+func nlbAddress(addressType string, policy *asdbv1.AerospikeNetworkPolicy) string {
+	if policy == nil {
+		return ""
+	}
+
+	switch addressType {
+	case alternateAccess, tlsAlternateAccess:
+		return policy.NLBAddress
+	default:
+		return ""
+	}
 }
