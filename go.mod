@@ -3,15 +3,15 @@ module github.com/aerospike/aerospike-kubernetes-init
 go 1.26.10
 
 require (
-	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.6.1-0.20261105051748-b5ee5672ec6a
+	github.com/aerospike/aerospike-kubernetes-operator/v4 v4.7.0
 	github.com/go-logr/logr v1.4.4
 	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/spf13/cobra v1.10.2
 	gomodules.xyz/jsonpatch/v2 v2.5.0
-	k8s.io/api v0.37.1
+	k8s.io/api v0.37.2
 	k8s.io/apimachinery v0.37.2
-	k8s.io/client-go v0.37.1
+	k8s.io/client-go v0.37.2
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd
 	sigs.k8s.io/controller-runtime v0.25.2
 )
