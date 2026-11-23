@@ -7,12 +7,6 @@ ROOT_DIR="$DIR/.."
 
 cd "$ROOT_DIR"
 
-# For non-tag github triggers, only test docker build. Do not push docker images
-if [ "$REF_TYPE" != 'tag' ]; then
-	make docker-buildx-build IMG="$IMG_BASE":"$TAG"
-	exit 0
-fi
-
 # Push docker image to dockerhub
 make docker-buildx-build-push IMG="$IMG_BASE":"$TAG"
 
