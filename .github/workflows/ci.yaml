@@ -1,4 +1,4 @@
-# CI for pull requests and master.
+# CI for pull requests, master and approved fork PR commits.
 # Builds the init images, pushes them to JFrog and scans them.
 
 name: CI
@@ -8,13 +8,22 @@ on:
   push:
     branches:
       - master
+  # fork-pr-approval.yaml dispatches CI on fork-pr/<PR number> for a fork PR
+  # commit a maintainer approved.
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: Number of the fork PR, set by fork-pr-approval.yaml
+        type: string
+        required: false
 
 permissions: {}
 
 # Runs of the same PR wait for each other and run one by one, oldest first.
-# None are cancelled. Other runs get their own group, so they never wait.
+# None are cancelled. Runs of the same fork-pr branch do the same. Other runs
+# get their own group, so they never wait.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  group: ci-${{ github.event.pull_request.number || (startsWith(github.ref_name, 'fork-pr/') && github.ref_name) || github.run_id }}
   queue: max
 
 defaults:
@@ -25,6 +34,8 @@ jobs:
   prepare:
     name: Prepare
     # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
+    # Once a maintainer approves a fork PR commit, fork-pr-approval.yaml pushes
+    # it to fork-pr/<PR number> and dispatches CI there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:
@@ -51,7 +62,7 @@ jobs:
       - name: Compute version
         id: version
         env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr-number }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           # NEXT_VERSION from the Makefile, e.g. 2.5.6
@@ -68,11 +79,20 @@ jobs:
             exit 1
           fi
 
-          # pr-163 for a pull request, master for a push to master
+          # pr-163 for a pull request or for fork-pr/163, master for a push to master
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             label="pr-$PR_NUMBER"
-          else
+          elif [[ "$GITHUB_REF_NAME" == fork-pr/* ]]; then
+            if [ -z "$PR_NUMBER" ]; then
+              echo "::error::Set the pr-number input when dispatching CI on $GITHUB_REF_NAME."
+              exit 1
+            fi
+            label="pr-$PR_NUMBER"
+          elif [ "$GITHUB_REF_NAME" = "master" ]; then
             label="master"
+          else
+            echo "::error::CI runs only for PRs, master and fork-pr branches, not $GITHUB_REF_NAME."
+            exit 1
           fi
 
           short_sha=${SHA::7}
@@ -159,3 +179,40 @@ jobs:
         run: |
           docker pull "$INIT_IMG"
           snyk container test "$INIT_IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
+
+  # A dispatched run's checks don't show on the fork PR, so the result goes to
+  # the PR's commit as the "CI result" status.
+  report-fork-pr:
+    name: Report to fork PR
+    needs: [prepare, init-image, openshift-image, scan]
+    if: always() && startsWith(github.ref_name, 'fork-pr/')
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Set commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          # Any job that didn't succeed fails the status.
+          state=success
+          description="All CI jobs passed"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              state=failure
+              description="One or more CI jobs failed or were skipped"
+            fi
+          done
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$state" \
+            -f context="CI result" \
+            -f description="$description" \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > /dev/null
+          echo "Job results: $RESULTS -> $state"
