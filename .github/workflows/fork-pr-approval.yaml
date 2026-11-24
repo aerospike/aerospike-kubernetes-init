@@ -1,30 +1,26 @@
-# Runs CI for a fork PR commit after a maintainer reviews it. Fork PRs get no
+# Runs CI for a fork PR after a maintainer reviews it. Fork PRs get no
 # secrets, so ci.yaml can't run for them on its own.
 #
-# To run it: Actions > Fork PR approval > Run workflow, leave the branch on
-# master, and enter the PR number and the full SHA of the commit you reviewed.
+# To run it, comment /ok-to-test on the PR. Only users with write access can
+# do this. It tests the PR's head commit at the time the job runs, so comment
+# right after reviewing, and comment again after each new push.
 #
-# Only users with write access can run this. It pushes the commit to
-# fork-pr/<PR number> and dispatches ci.yaml there, without running any of the
-# PR's code. GitHub refuses the push if the PR changes .github/workflows/.
+# It pushes the commit to fork-pr/<PR number> and dispatches ci.yaml there,
+# without running any of the PR's code. GitHub refuses the push if the PR
+# changes .github/workflows/.
 
 name: Fork PR approval
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr:
-        description: Fork PR number
-        required: true
-      sha:
-        description: Full SHA of the PR commit you reviewed
-        required: true
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
 jobs:
   mirror:
-    name: Run CI for a fork PR commit
+    name: Run CI for a fork PR
+    if: github.event.issue.pull_request && startsWith(github.event.comment.body, '/ok-to-test')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -35,21 +31,23 @@ jobs:
         with:
           egress-policy: audit
 
-      - name: Push the commit and start CI
+      - name: Push the PR head and start CI
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ inputs.pr }}
-          SHA: ${{ inputs.sha }}
+          PR: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
         run: |
-          git init -q
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch -q --depth=1 origin "refs/pull/${PR}/head"
-
-          # The fork may have pushed since the review.
-          if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
-            echo "::error::The head of PR #$PR is not $SHA. Review the new commit first."
+          permission=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${COMMENTER}/permission" --jq .permission)
+          if [ "$permission" != admin ] && [ "$permission" != write ]; then
+            echo "::error::$COMMENTER has $permission access. /ok-to-test needs write access."
             exit 1
           fi
 
-          git push -q --force origin "${SHA}:refs/heads/fork-pr/${PR}"
+          git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch -q --depth=1 origin "refs/pull/${PR}/head"
+          sha=$(git rev-parse FETCH_HEAD)
+
+          git push -q --force origin "${sha}:refs/heads/fork-pr/${PR}"
           gh workflow run ci.yaml --repo "$GITHUB_REPOSITORY" --ref "fork-pr/${PR}" -f pr-number="$PR"
+          echo "Started CI for $sha on fork-pr/${PR}"
