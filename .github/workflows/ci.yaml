@@ -34,8 +34,8 @@ jobs:
   prepare:
     name: Prepare
     # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
-    # Once a maintainer approves a fork PR commit, fork-pr-approval.yaml pushes
-    # it to fork-pr/<PR number> and dispatches CI there.
+    # After reviewing a fork PR commit, a maintainer runs fork-pr-approval.yaml,
+    # which pushes it to fork-pr/<PR number> and dispatches CI there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:

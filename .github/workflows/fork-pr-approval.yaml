@@ -1,108 +1,55 @@
-# Runs CI for a fork PR after a maintainer approves the commit.
+# Runs CI for a fork PR commit after a maintainer reviews it. Fork PRs get no
+# secrets, so ci.yaml can't run for them on its own.
 #
-# Fork PRs get no secrets, so ci.yaml can't run for them. Every push to a fork
-# PR starts this workflow, and the mirror job waits on the fork-pr-ci
-# environment until a maintainer approves it. Review the PR at the commit the
-# run shows before approving: after approval, that commit's code runs with
-# the CI secrets.
+# To run it: Actions > Fork PR approval > Run workflow, leave the branch on
+# master, and enter the PR number and the full SHA of the commit you reviewed.
 #
-# After approval, the job pushes that exact commit to fork-pr/<PR number> and
-# dispatches ci.yaml on that branch. A push made with GITHUB_TOKEN doesn't
-# start workflows, but a dispatch does. ci.yaml reports its result to the PR
-# as the "CI result" commit status. Nothing here checks out or runs the PR's
-# code.
-#
-# GITHUB_TOKEN can't push changes to .github/workflows/, so GitHub refuses the
-# push when the PR changes them. A maintainer handles those PRs by hand.
+# Only users with write access can run this. It pushes the commit to
+# fork-pr/<PR number> and dispatches ci.yaml there, without running any of the
+# PR's code. GitHub refuses the push if the PR changes .github/workflows/.
 
 name: Fork PR approval
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Fork PR number
+        required: true
+      sha:
+        description: Full SHA of the PR commit you reviewed
+        required: true
 
 permissions: {}
 
 jobs:
   mirror:
-    name: Approve fork PR commit
-    if: github.event.action != 'closed' && github.event.pull_request.head.repo.fork
+    name: Run CI for a fork PR commit
     runs-on: ubuntu-24.04
-    environment: fork-pr-ci
     permissions:
       contents: write
       actions: write
-      statuses: write
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
 
-      # FORK_PR_GATE is a secret of the fork-pr-ci environment only. If the
-      # environment is missing, GitHub creates it with no reviewers, and this
-      # job would push without approval. The secret is empty then, so stop.
-      - name: Check the approval gate
+      - name: Push the commit and start CI
         env:
-          GATE: ${{ secrets.FORK_PR_GATE }}
-        run: |
-          if [ -z "$GATE" ]; then
-            echo "::error::The fork-pr-ci environment is not set up. Nothing was pushed."
-            exit 1
-          fi
-
-      - name: Push the approved commit
-        env:
-          TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
         run: |
           git init -q
-          git remote add origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch -q --depth=1 origin "refs/pull/${PR}/head"
 
-          # The fork got a new commit after this run started. That commit has
-          # its own run to approve.
+          # The fork may have pushed since the review.
           if [ "$(git rev-parse FETCH_HEAD)" != "$SHA" ]; then
-            echo "::error::The PR head is no longer $SHA. Approve the newer run instead."
+            echo "::error::The head of PR #$PR is not $SHA. Review the new commit first."
             exit 1
           fi
 
           git push -q --force origin "${SHA}:refs/heads/fork-pr/${PR}"
-
-      - name: Start CI
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
           gh workflow run ci.yaml --repo "$GITHUB_REPOSITORY" --ref "fork-pr/${PR}" -f pr-number="$PR"
-
-          # Pending until ci.yaml reports the result. The link lists the CI
-          # runs of the branch, since the dispatch doesn't return the run.
-          runs_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/ci.yaml?query=branch%3Afork-pr%2F${PR}"
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
-            -f state=pending \
-            -f context="CI result" \
-            -f description="CI is running for the approved commit" \
-            -f target_url="$runs_url" > /dev/null
-          echo "Started CI for $SHA on fork-pr/${PR}: $runs_url"
-
-  cleanup:
-    name: Delete mirror branch
-    if: github.event.action == 'closed' && github.event.pull_request.head.repo.fork
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Harden the runner (Audit all outbound calls)
-        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
-        with:
-          egress-policy: audit
-
-      # The branch is missing when no commit of the PR was ever approved.
-      - name: Delete fork-pr branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number }}
-        run: gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/fork-pr/${PR}" || true
