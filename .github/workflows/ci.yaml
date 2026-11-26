@@ -8,8 +8,8 @@ on:
   push:
     branches:
       - master
-  # fork-pr-approval.yaml dispatches CI on fork-pr/<PR number> for a fork PR
-  # commit a maintainer approved.
+  # fork-pr-approval.yaml dispatches CI on fork-pr/<PR number>-<short SHA> for
+  # a fork PR commit a maintainer approved.
   workflow_dispatch:
     inputs:
       pr-number:
@@ -20,8 +20,8 @@ on:
 permissions: {}
 
 # Runs of the same PR wait for each other and run one by one, oldest first.
-# None are cancelled. Runs of the same fork-pr branch do the same. Other runs
-# get their own group, so they never wait.
+# None are cancelled. Each fork-pr branch holds one commit, so only repeat
+# runs of that commit wait. Other runs get their own group, so they never wait.
 concurrency:
   group: ci-${{ github.event.pull_request.number || (startsWith(github.ref_name, 'fork-pr/') && github.ref_name) || github.run_id }}
   queue: max
@@ -35,14 +35,13 @@ jobs:
     name: Prepare
     # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
     # After reviewing a fork PR, a maintainer comments /ok-to-test, and
-    # fork-pr-approval.yaml pushes its head to fork-pr/<PR number> and
-    # dispatches CI there.
+    # fork-pr-approval.yaml pushes its head to fork-pr/<PR number>-<short SHA>
+    # and dispatches CI there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     outputs:
-      base-version: ${{ steps.version.outputs.base-version }}
       version: ${{ steps.version.outputs.version }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -80,7 +79,7 @@ jobs:
             exit 1
           fi
 
-          # pr-163 for a pull request or for fork-pr/163, master for a push to master
+          # pr-163 for a pull request or for fork-pr/163-<short SHA>, master for a push to master
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             label="pr-$PR_NUMBER"
           elif [[ "$GITHUB_REF_NAME" == fork-pr/* ]]; then
@@ -98,7 +97,6 @@ jobs:
 
           short_sha=${SHA::7}
 
-          echo "base-version=$base" >> "$GITHUB_OUTPUT"
           echo "version=$base-$label-$short_sha" | tee -a "$GITHUB_OUTPUT"
 
   init-image:
@@ -109,8 +107,7 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-    # TODO(sidntrivedi): Pin to main once DEVINFRA-77 (jf-build-number) merges.
-    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@6f58378e31350ac56a454fb2633f726423e1810a # feat/docker-build-deploy-jf-build-number
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@5526175a68b220800c89b00689bbc42406969152 # main
     with:
       jf-project: platforms
       image-name: aerospike-kubernetes-init
@@ -119,7 +116,7 @@ jobs:
       # The operator CI references the build-info as ako-init:<INIT_TAG>, so
       # store it under the version instead of the run number.
       jf-build-number: ${{ needs.prepare.outputs.version }}
-      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.base-version }}"}'
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}"}'
       # Same as the Makefile build targets
       no-cache: true
 
@@ -132,26 +129,34 @@ jobs:
       packages: write
       attestations: write
       id-token: write
-    # TODO(sidntrivedi): Pin to main once DEVINFRA-77 (jf-build-number) merges.
-    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@6f58378e31350ac56a454fb2633f726423e1810a # feat/docker-build-deploy-jf-build-number
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@5526175a68b220800c89b00689bbc42406969152 # main
     with:
       jf-project: platforms
       image-name: aerospike-kubernetes-init-openshift
       app-version: ${{ needs.prepare.outputs.version }}
       jf-build-name: ako-init-openshift
       jf-build-number: ${{ needs.prepare.outputs.version }}
-      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.base-version }}", "USER": "1001"}'
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}", "USER": "1001"}'
       no-cache: true
 
+  # Both images run their own microdnf update, so their packages can differ.
   scan:
-    name: Vulnerability scan
-    needs: init-image
+    name: Vulnerability scan (${{ matrix.image }})
+    needs: [init-image, openshift-image]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: init
+            ref: ${{ needs.init-image.outputs.immutable-tag }}
+          - image: openshift
+            ref: ${{ needs.openshift-image.outputs.immutable-tag }}
     env:
-      INIT_IMG: ${{ needs.init-image.outputs.immutable-tag }}
+      IMG: ${{ matrix.ref }}
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -182,13 +187,15 @@ jobs:
         uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04
 
       # Same thresholds as docker-build.yaml
-      - name: Scan init image
+      - name: Scan image
         run: |
-          docker pull "$INIT_IMG"
-          snyk container test "$INIT_IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
+          docker pull "$IMG"
+          snyk container test "$IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
 
   # Reports the result to the fork PR as the "CI result" status on its commit,
-  # and as a PR comment, which notifies the PR author.
+  # and as a PR comment, which notifies the PR author. Then deletes the
+  # fork-pr/<N>-<short SHA> branch, so re-running this run from the Actions tab won't work.
+  # To test again, comment /ok-to-test on the PR.
   report-fork-pr:
     name: Report to fork PR
     needs: [prepare, init-image, openshift-image, scan]
@@ -197,6 +204,8 @@ jobs:
     permissions:
       statuses: write
       pull-requests: write
+      contents: write
+      actions: read
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -209,12 +218,15 @@ jobs:
           PR: ${{ inputs.pr-number }}
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
-          # Any job that didn't succeed fails the status.
+          # Any job that didn't succeed fails the status. The status API only
+          # accepts success or failure, so the comment uses outcome instead.
           state=success
+          outcome=passed
           description="All CI jobs passed"
           for result in $RESULTS; do
             if [ "$result" != "success" ]; then
               state=failure
+              outcome=failed
               description="One or more CI jobs failed or were skipped"
             fi
           done
@@ -225,7 +237,25 @@ jobs:
             -f context="CI result" \
             -f description="$description" \
             -f target_url="$run_url" > /dev/null
-          echo "Job results: $RESULTS -> $state"
+          echo "Job results: $RESULTS -> $outcome"
 
           gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
-            --body "CI result for ${GITHUB_SHA:0:7}: **${state}**. ${description}. [View the run](${run_url})"
+            --body "CI result for ${GITHUB_SHA:0:7}: **${outcome}**. ${description}. [View the run](${run_url})"
+
+      - name: Delete the fork-pr branch
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Keep the branch while another CI run on it is queued or running.
+          # The last run deletes it.
+          pending=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yaml --branch "$GITHUB_REF_NAME" \
+            --json databaseId,status \
+            --jq "[.[] | select(.databaseId != ${GITHUB_RUN_ID} and .status != \"completed\")] | length")
+          if [ "$pending" -gt 0 ]; then
+            echo "$pending other CI run(s) on $GITHUB_REF_NAME still pending. Keeping the branch."
+            exit 0
+          fi
+
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_REF_NAME}"
+          echo "Deleted $GITHUB_REF_NAME"
