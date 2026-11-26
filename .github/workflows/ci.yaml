@@ -119,6 +119,7 @@ jobs:
       build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}"}'
       # Same as the Makefile build targets
       no-cache: true
+      sbom: false
 
   # Runs as the non-root user 1001, like docker-buildx-build-push-openshift.
   openshift-image:
@@ -138,6 +139,7 @@ jobs:
       jf-build-number: ${{ needs.prepare.outputs.version }}
       build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}", "USER": "1001"}'
       no-cache: true
+      sbom: false
 
   # Both images run their own microdnf update, so their packages can differ.
   scan:
