@@ -757,11 +757,15 @@ func (initp *InitParams) getEndpoints(addressType string) []string {
 	}
 
 	for _, addr := range globalAddresses {
+		if addr == "" {
+			continue
+		}
+
 		host := net.ParseIP(addr)
 
 		switch {
 		case host == nil:
-			continue
+			endPoints = append(endPoints, net.JoinHostPort(addr, strconv.Itoa(int(globalPort))))
 		case host.To4() != nil:
 			accessPoint := host.String() + ":" + strconv.Itoa(int(globalPort))
 			endPoints = append(endPoints, accessPoint)

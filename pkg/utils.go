@@ -32,14 +32,16 @@ type globalAddressesAndPorts struct {
 }
 
 type networkInfo struct {
-	networkPolicy           asdbv1.AerospikeNetworkPolicy
-	hostIP                  string
-	podIP                   string
-	internalIP              string
-	externalIP              string
-	configureAccessIP       string
-	configuredAlterAccessIP string
-	serviceTLSName          string
+	networkPolicy                         asdbv1.AerospikeNetworkPolicy
+	hostIP                                string
+	podIP                                 string
+	internalIP                            string
+	externalIP                            string
+	configureAccessIP                     string
+	configuredAlterAccessIP               string
+	loadBalancerAlternateAccessAddress    string
+	loadBalancerTLSAlternateAccessAddress string
+	serviceTLSName                        string
 
 	customAccessNetworkIPs             []string
 	customTLSAccessNetworkIPs          []string
@@ -100,6 +102,10 @@ func (initp *InitParams) setNetworkInfo(ctx context.Context) error {
 		hostIP:          os.Getenv("MY_HOST_IP"),
 		podIP:           os.Getenv("MY_POD_IP"),
 		internalIP:      os.Getenv("MY_HOST_IP"),
+		loadBalancerAlternateAccessAddress: initp.aeroCluster.Spec.
+			AerospikeNetworkPolicy.LoadBalancerAlternateAccessAddress,
+		loadBalancerTLSAlternateAccessAddress: initp.aeroCluster.Spec.
+			AerospikeNetworkPolicy.LoadBalancerTLSAlternateAccessAddress,
 	}
 
 	asConfig := initp.aeroCluster.Spec.AerospikeConfig
@@ -298,8 +304,10 @@ func (initp *InitParams) setIPAndPorts(ctx context.Context) (err error) {
 	netInfo := initp.networkInfo
 
 	// Sets up port related variables.
-	// User service ports only when MultiPodPerHost is true and node network is defined in NetworkPolicy
-	if asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) && initp.isNodeNetwork() {
+	// Use NodePorts when a per-pod Service exists: multiPodPerHost, or networkLoadBalancer
+	// (which creates that Service even when multiPodPerHost is false).
+	if initp.isNodeNetwork() && (asdbv1.GetBool(initp.aeroCluster.Spec.PodSpec.MultiPodPerHost) ||
+		initp.networkInfo.networkPolicy.UsesNetworkLoadBalancer()) {
 		if netInfo.mappedServicePort, netInfo.mappedServiceTLSPort, netInfo.mappedAdminPort,
 			netInfo.mappedAdminTLSPort, err = getPorts(
 			ctx, initp.k8sClient, initp.aeroCluster.Namespace, initp.podName); err != nil {
