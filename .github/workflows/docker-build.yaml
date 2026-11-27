@@ -4,9 +4,6 @@ on:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
       - '[0-9]+.[0-9]+.[0-9]+-dev[0-9]+'
-  pull_request:
-    branches:
-      - '*'
 jobs:
   build-and-push:
     name: Build and push image
@@ -25,19 +22,16 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        id: buildx
         uses: step-security/setup-buildx-action@e50058a0fcd8d1a7d626c905502d010a468bf238 # v4.4.1
 
       - name: Login to DockerHub
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: ${{ github.ref_type == 'tag' }}
         with:
           username: ${{ secrets.AEROSPIKE_DOCKER_ORG_NAME }}
           password: ${{ secrets.AEROSPIKE_DOCKER_ORG_RW_TOKEN }}
 
       - name: Login to Quay.io
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        if: ${{ github.ref_type == 'tag' }}
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
@@ -45,41 +39,28 @@ jobs:
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        if: ${{ github.ref_type == 'tag' }}
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
       - name: Login to Amazon ECR
-        id: login-ecr
-        if: ${{ github.ref_type == 'tag' }}
         uses: aws-actions/amazon-ecr-login@7290e214a610b32bc0eef81748948b6d466a8783 # v2.2.0
 
       - name: Set image tag env
         id: set-tag
-        # GITHUB_HEAD_REF will be set in case of PR and contains the branch name. Replace / with - in branch name
         # GITHUB_REF_NAME contains the git tag.
         run: |
-          if [[ $GITHUB_HEAD_REF != '' ]]; then
-            NEW_GITHUB_HEAD_REF="${GITHUB_HEAD_REF//\//-}"
-            echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_ENV"
-            echo "TAG=$NEW_GITHUB_HEAD_REF" >> "$GITHUB_OUTPUT"
-          else
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
-            echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
-          fi
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          echo "TAG=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Build and push image
         env:
-          REF_TYPE: ${{ github.ref_type }}
           AWS_ECR: "568976754000.dkr.ecr.ap-south-1.amazonaws.com"
         run: ./scripts/build.sh
 
       - name: Run Snyk image security scan
         uses: snyk/actions/docker@9adf32b1121593767fc3c057af55b55db032dc04
-        continue-on-error: true
-        id: docker-image-scan
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
@@ -87,22 +68,12 @@ jobs:
           image: ${{ env.IMG_BASE }}:${{ env.TAG }}
           args: --file=Dockerfile --severity-threshold=high --fail-on=all # fail on vulnerabilities with fix available
 
-# https://github.blog/changelog/2024-05-06-code-scanning-will-stop-combining-runs-from-a-single-upload/
-#      - name: Upload result to GitHub Code Scanning
-#        uses: github/codeql-action/upload-sarif@v3
-#        with:
-#          sarif_file: snyk.sarif
-
-      - name: Check docker image scan status
-        if: ${{ steps.docker-image-scan.outcome == 'failure' }}
-        run: exit 1
-
   certify-image:
     name: Red Hat Preflight Certification
     runs-on: ubuntu-latest
     needs: build-and-push
-    # Only run certification for release tags (not dev tags or PRs)
-    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-dev') }}
+    # Only run certification for release tags (not dev tags)
+    if: ${{ !contains(github.ref_name, '-dev') }}
     env:
       QUAY_IMAGE: quay.io/${{ github.repository }}:${{ needs.build-and-push.outputs.TAG }}
     steps:

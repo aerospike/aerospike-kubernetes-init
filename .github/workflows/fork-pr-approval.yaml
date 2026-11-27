@@ -1,0 +1,76 @@
+# Runs CI for a fork PR after a maintainer reviews it. Fork PRs get no
+# secrets, so ci.yaml can't run for them on its own.
+#
+# To run it, comment /ok-to-test <SHA> on the PR, with the full 40-character
+# SHA of the head commit you reviewed. Only users with write access can do
+# this. If the PR's head is no longer that commit, nothing runs, so code pushed
+# after the review can't run unreviewed. Comment again after each new push.
+#
+# A short SHA isn't accepted. A fork author could create a new commit whose
+# short SHA matches the reviewed one.
+#
+# It pushes the commit to fork-pr/<PR number>-<short SHA> and dispatches ci.yaml there,
+# without running any of the PR's code. ci.yaml deletes the branch when its run ends.
+#
+# ci.yaml runs from that branch, so a PR that changes .github/ is refused
+# before the push. Otherwise a fork could edit ci.yaml and run it with our
+# secrets. GitHub also refuses the push, but only with a generic error.
+#
+# If CI can't be started, it comments the reason on the PR.
+
+name: Fork PR approval
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  mirror:
+    name: Run CI for a fork PR
+    # A bare /ok-to-test also runs the job, so it gets a comment explaining the format.
+    if: github.event.issue.pull_request && (github.event.comment.body == '/ok-to-test' || startsWith(github.event.comment.body, '/ok-to-test '))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+      # To comment on the PR when CI can't be started
+      pull-requests: write
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # On issue_comment this checks out master, never the PR, so the script
+      # below is the reviewed copy on master. The script needs full history to
+      # find where the PR left master, and the token checkout keeps in the git
+      # config to push.
+      # Never set ref: here. Checking out the PR would run the fork's copy of the
+      # script with this job's write token.
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Push the PR head and start CI
+        id: start
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+          COMMENT: ${{ github.event.comment.body }}
+        run: ./scripts/fork-pr-approval.sh
+
+      # Must not start with /ok-to-test, or it would match this workflow's trigger.
+      - name: Report the failure on the PR
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.number }}
+          REASON: ${{ steps.start.outputs.reason }}
+        run: |
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
+            --body "Could not start CI: ${REASON:-see the run for the error.} [View the run](${run_url})"

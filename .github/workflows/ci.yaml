@@ -1,0 +1,287 @@
+# CI for pull requests, master and approved fork PR commits.
+# Builds the init images, pushes them to JFrog and scans them.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  # fork-pr-approval.yaml dispatches CI on fork-pr/<PR number>-<short SHA> for
+  # a fork PR commit a maintainer approved.
+  workflow_dispatch:
+    inputs:
+      pr-number:
+        description: Number of the fork PR, set by fork-pr-approval.yaml
+        type: string
+        required: false
+
+permissions: {}
+
+# Commits run in parallel, even on the same PR, because each commit's image
+# tags, build-info and build cache are named after its version, which includes
+# the SHA. Only repeat runs of the same commit wait, oldest first, since they
+# would write the same build-info. None are cancelled. Each fork-pr branch
+# holds one commit. Master runs get their own group, so they never wait.
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || (startsWith(github.ref_name, 'fork-pr/') && github.ref_name) || github.run_id }}
+  queue: max
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  prepare:
+    name: Prepare
+    # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
+    # After reviewing a fork PR, a maintainer comments /ok-to-test <SHA>, and
+    # fork-pr-approval.yaml pushes its head to fork-pr/<PR number>-<short SHA>
+    # and dispatches CI there.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # Fetches all tags, so Compute version can find the last release.
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # e.g. 2.5.6-pr-163-a1b2c3d, 2.5.6-master-e4f5a6b. For a PR the SHA is the PR's head commit.
+      # The base is NEXT_VERSION, which must be newer than the last release tag,
+      # or the dev versions would sort below that release. The operator webhook
+      # also needs a version at the start of the init image tag.
+      - name: Compute version
+        id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr-number }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # NEXT_VERSION from the Makefile, e.g. 2.5.6
+          base=$(sed -n 's/^NEXT_VERSION ?= *//p' Makefile)
+
+          # Highest release tag in the repo, e.g. 2.5.5, even if HEAD can't reach it.
+          # Tags with a dash (2.5.4-rc1) are skipped.
+          last=$(git tag -l '[0-9]*.[0-9]*.[0-9]*' | grep -v -- - | sort -V | tail -1)
+
+          # Fail unless base sorts strictly after last. Equal versions also fail.
+          newest=$(printf '%s\n' "$last" "$base" | sort -V | tail -1)
+          if [ "$newest" = "$last" ]; then
+            echo "::error::NEXT_VERSION ($base) must be newer than the last release ($last). Bump it in the Makefile."
+            exit 1
+          fi
+
+          # pr-163 for a pull request or for fork-pr/163-<short SHA>, master for a push to master
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            label="pr-$PR_NUMBER"
+          elif [[ "$GITHUB_REF_NAME" == fork-pr/* ]]; then
+            # The branch must be fork-pr/<pr-number input>-<short SHA of this commit>,
+            # as fork-pr-approval.yaml names it.
+            if [[ ! "$GITHUB_REF_NAME" =~ ^fork-pr/([0-9]+)-([0-9a-f]{7})$ ]] \
+              || [ "${BASH_REMATCH[1]}" != "$PR_NUMBER" ] || [ "${BASH_REMATCH[2]}" != "${SHA::7}" ]; then
+              echo "::error::$GITHUB_REF_NAME isn't fork-pr/<pr-number>-<short SHA> for pr-number '$PR_NUMBER' and commit ${SHA::7}."
+              exit 1
+            fi
+            label="pr-$PR_NUMBER"
+          elif [ "$GITHUB_REF_NAME" = "master" ]; then
+            label="master"
+          else
+            echo "::error::CI runs only for PRs, master and fork-pr branches, not $GITHUB_REF_NAME."
+            exit 1
+          fi
+
+          short_sha=${SHA::7}
+
+          echo "version=$base-$label-$short_sha" | tee -a "$GITHUB_OUTPUT"
+
+  init-image:
+    name: Init image
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@5526175a68b220800c89b00689bbc42406969152 # main
+    with:
+      jf-project: platforms
+      image-name: aerospike-kubernetes-init
+      app-version: ${{ needs.prepare.outputs.version }}
+      jf-build-name: ako-init
+      # The operator CI references the build-info as ako-init:<INIT_TAG>, so
+      # store it under the version instead of the run number.
+      jf-build-number: ${{ needs.prepare.outputs.version }}
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}"}'
+      # Same as the Makefile build targets
+      no-cache: true
+
+  # Runs as the non-root user 1001, like docker-buildx-build-push-openshift.
+  openshift-image:
+    name: OpenShift init image
+    needs: prepare
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    uses: aerospike/shared-workflows/.github/workflows/reusable_docker-build-deploy.yaml@5526175a68b220800c89b00689bbc42406969152 # main
+    with:
+      jf-project: platforms
+      image-name: aerospike-kubernetes-init-openshift
+      app-version: ${{ needs.prepare.outputs.version }}
+      jf-build-name: ako-init-openshift
+      jf-build-number: ${{ needs.prepare.outputs.version }}
+      build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}", "USER": "1001"}'
+      no-cache: true
+
+  # Both images run their own microdnf update, so their packages can differ.
+  # Runs if at least one image built, so one failed build doesn't stop the
+  # other image's scan. A job-level if can't read matrix, so each leg skips
+  # its scan step if its own image didn't build.
+  scan:
+    name: Vulnerability scan (${{ matrix.image }})
+    needs: [init-image, openshift-image]
+    if: ${{ !cancelled() && (needs.init-image.result == 'success' || needs.openshift-image.result == 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: aerospike-kubernetes-init
+            ref: ${{ needs.init-image.outputs.immutable-tag }}
+            build: ${{ needs.init-image.result }}
+          - image: aerospike-kubernetes-init-openshift
+            ref: ${{ needs.openshift-image.outputs.immutable-tag }}
+            build: ${{ needs.openshift-image.result }}
+    env:
+      IMG: ${{ matrix.ref }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JFrog CLI
+        id: jf
+        uses: step-security/setup-jfrog-cli@9d5fe0e81fc593a6c0c39bf83ad9a7b45587eed0 # v5.3.1
+        env:
+          JF_URL: https://artifact.aerospike.io
+        with:
+          oidc-provider-name: gh-aerospike
+          oidc-audience: aerospike
+
+      - name: Login to JFrog
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: artifact.aerospike.io
+          username: ${{ steps.jf.outputs.oidc-user }}
+          password: ${{ steps.jf.outputs.oidc-token }}
+
+      - name: Set up Snyk
+        uses: snyk/actions/setup@9adf32b1121593767fc3c057af55b55db032dc04
+
+      # Same thresholds as docker-build.yaml
+      - name: Scan image
+        if: matrix.build == 'success'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          docker pull "$IMG"
+          snyk container test "$IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
+
+  # Reports the result to the fork PR as the "CI result" status on its commit,
+  # and as a PR comment, which notifies the PR author. Then deletes the
+  # fork-pr/<N>-<short SHA> branch, so re-running this run from the Actions tab won't work.
+  # To test again, comment /ok-to-test <SHA> on the PR.
+  report-fork-pr:
+    name: Report to fork PR
+    needs: [prepare, init-image, openshift-image, scan]
+    if: always() && startsWith(github.ref_name, 'fork-pr/')
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+      pull-requests: write
+      contents: write
+      actions: read
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      # The if above can only check the prefix. Don't comment on a PR or delete
+      # the branch unless it's fork-pr/<pr-number input>-<short SHA of this commit>.
+      - name: Check the fork-pr branch
+        id: check
+        env:
+          PR: ${{ inputs.pr-number }}
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^fork-pr/([0-9]+)-([0-9a-f]{7})$ ]] \
+            || [ "${BASH_REMATCH[1]}" != "$PR" ] || [ "${BASH_REMATCH[2]}" != "${GITHUB_SHA::7}" ]; then
+            echo "::error::$GITHUB_REF_NAME isn't fork-pr/<pr-number>-<short SHA> for pr-number '$PR' and commit ${GITHUB_SHA::7}."
+            exit 1
+          fi
+
+      - name: Set commit status and comment on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr-number }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          # Any job that didn't succeed fails the status. The status API only
+          # accepts success or failure, so the comment uses outcome instead.
+          state=success
+          outcome=passed
+          description="All CI jobs passed"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              state=failure
+              outcome=failed
+              description="One or more CI jobs failed or were skipped"
+            fi
+          done
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$state" \
+            -f context="CI result" \
+            -f description="$description" \
+            -f target_url="$run_url" > /dev/null
+          echo "Job results: $RESULTS -> $outcome"
+
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" \
+            --body "CI result for ${GITHUB_SHA:0:7}: **${outcome}**. ${description}. [View the run](${run_url})"
+
+      - name: Delete the fork-pr branch
+        if: always() && steps.check.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Keep the branch while another CI run on it is queued or running.
+          # The last run deletes it.
+          pending=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yaml --branch "$GITHUB_REF_NAME" \
+            --json databaseId,status \
+            --jq "[.[] | select(.databaseId != ${GITHUB_RUN_ID} and .status != \"completed\")] | length")
+          if [ "$pending" -gt 0 ]; then
+            echo "$pending other CI run(s) on $GITHUB_REF_NAME still pending. Keeping the branch."
+            exit 0
+          fi
+
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_REF_NAME}"
+          echo "Deleted $GITHUB_REF_NAME"
