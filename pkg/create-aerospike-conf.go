@@ -44,19 +44,21 @@ func (initp *InitParams) createAerospikeConf() error {
 	if initp.networkInfo.servicePort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.AccessType, access, initp.networkInfo.configureAccessIP,
-			initp.networkInfo.customAccessNetworkIPs, confString)
+			"", initp.networkInfo.customAccessNetworkIPs, confString)
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.AlternateAccessType, alternateAccess, initp.networkInfo.configuredAlterAccessIP,
-			initp.networkInfo.customAlternateAccessNetworkIPs, confString)
+			initp.networkInfo.loadBalancerAlternateAccessAddress, initp.networkInfo.customAlternateAccessNetworkIPs,
+			confString)
 	}
 
 	if initp.networkInfo.serviceTLSPort != 0 {
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAccessType, tlsAccess, initp.networkInfo.configureAccessIP,
-			initp.networkInfo.customTLSAccessNetworkIPs, confString)
+			"", initp.networkInfo.customTLSAccessNetworkIPs, confString)
 		confString = initp.substituteEndpoint(
 			initp.networkInfo.networkPolicy.TLSAlternateAccessType, tlsAlternateAccess,
-			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.customTLSAlternateAccessNetworkIPs, confString)
+			initp.networkInfo.configuredAlterAccessIP, initp.networkInfo.loadBalancerTLSAlternateAccessAddress,
+			initp.networkInfo.customTLSAlternateAccessNetworkIPs, confString)
 	}
 
 	if initp.networkInfo.fabricPort != 0 &&
@@ -189,7 +191,7 @@ func (initp *InitParams) updateNamespaceRackID(confString string) string {
 // Compute the access endpoints based on network policy.
 // As a kludge the computed values are stored late to update node summary.
 func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkType,
-	addressType, configuredIP string, interfaceIPs []string, confString string) string {
+	addressType, configuredIP, loadBalancerAddress string, interfaceIPs []string, confString string) string {
 	var (
 		accessAddress []string
 		accessPort    int32
@@ -231,6 +233,10 @@ func (initp *InitParams) substituteEndpoint(networkType asdbv1.AerospikeNetworkT
 	case asdbv1.AerospikeNetworkTypeCustomInterface:
 		accessAddress = interfaceIPs
 		accessPort = servicePort
+
+	case asdbv1.AerospikeNetworkTypeNetworkLoadBalancer:
+		accessAddress = append(accessAddress, loadBalancerAddress)
+		accessPort = mappedServicePort
 
 	default:
 		accessAddress = append(accessAddress, initp.networkInfo.podIP)
