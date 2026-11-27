@@ -19,11 +19,13 @@ on:
 
 permissions: {}
 
-# Runs of the same PR wait for each other and run one by one, oldest first.
-# None are cancelled. Each fork-pr branch holds one commit, so only repeat
-# runs of that commit wait. Other runs get their own group, so they never wait.
+# Commits run in parallel, even on the same PR, because each commit's image
+# tags, build-info and build cache are named after its version, which includes
+# the SHA. Only repeat runs of the same commit wait, oldest first, since they
+# would write the same build-info. None are cancelled. Each fork-pr branch
+# holds one commit. Master runs get their own group, so they never wait.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || (startsWith(github.ref_name, 'fork-pr/') && github.ref_name) || github.run_id }}
+  group: ci-${{ github.event.pull_request.head.sha || (startsWith(github.ref_name, 'fork-pr/') && github.ref_name) || github.run_id }}
   queue: max
 
 defaults:
@@ -34,7 +36,7 @@ jobs:
   prepare:
     name: Prepare
     # Fork PRs get no secrets or OIDC token, so nothing below can run for them.
-    # After reviewing a fork PR, a maintainer comments /ok-to-test, and
+    # After reviewing a fork PR, a maintainer comments /ok-to-test <SHA>, and
     # fork-pr-approval.yaml pushes its head to fork-pr/<PR number>-<short SHA>
     # and dispatches CI there.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -83,8 +85,11 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             label="pr-$PR_NUMBER"
           elif [[ "$GITHUB_REF_NAME" == fork-pr/* ]]; then
-            if [ -z "$PR_NUMBER" ]; then
-              echo "::error::Set the pr-number input when dispatching CI on $GITHUB_REF_NAME."
+            # The branch must be fork-pr/<pr-number input>-<short SHA of this commit>,
+            # as fork-pr-approval.yaml names it.
+            if [[ ! "$GITHUB_REF_NAME" =~ ^fork-pr/([0-9]+)-([0-9a-f]{7})$ ]] \
+              || [ "${BASH_REMATCH[1]}" != "$PR_NUMBER" ] || [ "${BASH_REMATCH[2]}" != "${SHA::7}" ]; then
+              echo "::error::$GITHUB_REF_NAME isn't fork-pr/<pr-number>-<short SHA> for pr-number '$PR_NUMBER' and commit ${SHA::7}."
               exit 1
             fi
             label="pr-$PR_NUMBER"
@@ -119,7 +124,6 @@ jobs:
       build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}"}'
       # Same as the Makefile build targets
       no-cache: true
-      sbom: false
 
   # Runs as the non-root user 1001, like docker-buildx-build-push-openshift.
   openshift-image:
@@ -139,7 +143,6 @@ jobs:
       jf-build-number: ${{ needs.prepare.outputs.version }}
       build-args-json: '{"VERSION": "${{ needs.prepare.outputs.version }}", "USER": "1001"}'
       no-cache: true
-      sbom: false
 
   # Both images run their own microdnf update, so their packages can differ.
   scan:
@@ -153,13 +156,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - image: init
+          - image: aerospike-kubernetes-init
             ref: ${{ needs.init-image.outputs.immutable-tag }}
-          - image: openshift
+          - image: aerospike-kubernetes-init-openshift
             ref: ${{ needs.openshift-image.outputs.immutable-tag }}
     env:
       IMG: ${{ matrix.ref }}
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
@@ -171,7 +173,7 @@ jobs:
 
       - name: Set up JFrog CLI
         id: jf
-        uses: step-security/setup-jfrog-cli@53aeacb709fce45d0baf69a13ec3342f7e2d71a9 # v5.1.0
+        uses: step-security/setup-jfrog-cli@9d5fe0e81fc593a6c0c39bf83ad9a7b45587eed0 # v5.3.1
         env:
           JF_URL: https://artifact.aerospike.io
         with:
@@ -179,7 +181,7 @@ jobs:
           oidc-audience: aerospike
 
       - name: Login to JFrog
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: artifact.aerospike.io
           username: ${{ steps.jf.outputs.oidc-user }}
@@ -190,6 +192,8 @@ jobs:
 
       # Same thresholds as docker-build.yaml
       - name: Scan image
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           docker pull "$IMG"
           snyk container test "$IMG" --file=Dockerfile --severity-threshold=high --fail-on=all
@@ -197,7 +201,7 @@ jobs:
   # Reports the result to the fork PR as the "CI result" status on its commit,
   # and as a PR comment, which notifies the PR author. Then deletes the
   # fork-pr/<N>-<short SHA> branch, so re-running this run from the Actions tab won't work.
-  # To test again, comment /ok-to-test on the PR.
+  # To test again, comment /ok-to-test <SHA> on the PR.
   report-fork-pr:
     name: Report to fork PR
     needs: [prepare, init-image, openshift-image, scan]
@@ -213,6 +217,19 @@ jobs:
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
         with:
           egress-policy: audit
+
+      # The if above can only check the prefix. Don't comment on a PR or delete
+      # the branch unless it's fork-pr/<pr-number input>-<short SHA of this commit>.
+      - name: Check the fork-pr branch
+        id: check
+        env:
+          PR: ${{ inputs.pr-number }}
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^fork-pr/([0-9]+)-([0-9a-f]{7})$ ]] \
+            || [ "${BASH_REMATCH[1]}" != "$PR" ] || [ "${BASH_REMATCH[2]}" != "${GITHUB_SHA::7}" ]; then
+            echo "::error::$GITHUB_REF_NAME isn't fork-pr/<pr-number>-<short SHA> for pr-number '$PR' and commit ${GITHUB_SHA::7}."
+            exit 1
+          fi
 
       - name: Set commit status and comment on the PR
         env:
@@ -245,7 +262,7 @@ jobs:
             --body "CI result for ${GITHUB_SHA:0:7}: **${outcome}**. ${description}. [View the run](${run_url})"
 
       - name: Delete the fork-pr branch
-        if: always()
+        if: always() && steps.check.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
