@@ -145,9 +145,13 @@ jobs:
       no-cache: true
 
   # Both images run their own microdnf update, so their packages can differ.
+  # Runs if at least one image built, so one failed build doesn't stop the
+  # other image's scan. A job-level if can't read matrix, so each leg skips
+  # its scan step if its own image didn't build.
   scan:
     name: Vulnerability scan (${{ matrix.image }})
     needs: [init-image, openshift-image]
+    if: ${{ !cancelled() && (needs.init-image.result == 'success' || needs.openshift-image.result == 'success') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -158,8 +162,10 @@ jobs:
         include:
           - image: aerospike-kubernetes-init
             ref: ${{ needs.init-image.outputs.immutable-tag }}
+            build: ${{ needs.init-image.result }}
           - image: aerospike-kubernetes-init-openshift
             ref: ${{ needs.openshift-image.outputs.immutable-tag }}
+            build: ${{ needs.openshift-image.result }}
     env:
       IMG: ${{ matrix.ref }}
     steps:
@@ -192,6 +198,7 @@ jobs:
 
       # Same thresholds as docker-build.yaml
       - name: Scan image
+        if: matrix.build == 'success'
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |

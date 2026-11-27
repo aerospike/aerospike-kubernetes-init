@@ -45,12 +45,19 @@ if [ "$head_sha" != "$approved_sha" ]; then
 fi
 
 # ci.yaml runs from the branch pushed below, so the PR must not change it.
-# The three dots compare with the commit the PR started from, so a PR
-# that is behind master isn't blamed for changes made on master.
+# The three dots show only what the PR changed.
 changed=$(git diff --name-only origin/master...pr-head -- .github/)
 if [ -n "$changed" ]; then
   echo "$changed"
   fail "This PR changes files under .github/, so CI can't run it from a fork."
+fi
+
+# The two dots compare the PR with master as it is now. A PR based on an
+# older master carries that master's .github/, and CI would run the old files.
+stale=$(git diff --name-only origin/master pr-head -- .github/)
+if [ -n "$stale" ]; then
+  echo "$stale"
+  fail "This PR's .github/ doesn't match master. Rebase it on master, then comment /ok-to-test again with the new SHA."
 fi
 
 # Each commit gets its own branch, and ci.yaml deletes it when its run ends.
